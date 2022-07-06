@@ -1,5 +1,9 @@
 module TeaLeaf
 
+export run
+
+include("wrappers.jl")
+
 struct ParallelType
     max_task::Int
     primary_task::Int
@@ -35,16 +39,13 @@ defaultin = """*tea
     tl_eps=1.0e-15g
     *endtea"""
 
-teabarrier() = ccall((:tea_barrier, "./tea_leaf.so"), Nothing, ())
-teainitcomms() = ccall((:__tea_module_MOD_tea_init_comms, "./tea_leaf.so"), Nothing, ())
-
 function initialise()
     if g_parallel.primary
         write(outfile, opening_message)
         print("Output file tea.out opened. All output will go there.")
     end
 
-    teabarrier()
+    wrapteabarrier()
 
     write(outfile, "Tea will run from the following input:-\n")
 
@@ -60,19 +61,18 @@ function initialise()
         # TODO: run parser code
     end
 
-    teabarrier()
+    wrapteabarrier()
 end
 
 function run()
-    teainitcomms()
+    wrapteainitcomms()
 
     if g_parallel.primary
         print(opening_message)
     end
 
-    ccall((:initialise_, "./tea_leaf.so"), Nothing, ())
-    # initialise()
-    ccall((:diffuse_, "./tea_leaf.so"), Nothing, ())
+    wrapinitialise()
+    wrapdiffuse()
 end
 
 end # module
