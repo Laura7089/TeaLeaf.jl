@@ -63,14 +63,16 @@ function initialise()
     teabarrier()
 end
 
-teainitcomms()
+function run()
+    teainitcomms()
 
-if g_parallel.primary
-    print(opening_message)
+    if g_parallel.primary
+        print(opening_message)
+    end
+
+    ccall((:initialise_, "./tea_leaf.so"), Nothing, ())
+    # initialise()
+    ccall((:diffuse_, "./tea_leaf.so"), Nothing, ())
 end
-
-ccall((:initialise_, "./tea_leaf.so"), Nothing, ())
-# initialise()
-ccall((:diffuse_, "./tea_leaf.so"), Nothing, ())
 
 end # module
