@@ -12,7 +12,7 @@ struct ParallelType
 end
 
 global g_version = 1.403
-global g_parallel = ParallelType(0, 0, 0, false)
+global g_parallel = ParallelType(0, 0, 0, true)
 global outfile = open("tea.out", "w")
 
 opening_message = """Tea Version $(g_version)
@@ -66,7 +66,6 @@ end
 
 function run()
     wrapteainitcomms()
-
     if g_parallel.primary
         print(opening_message)
     end
