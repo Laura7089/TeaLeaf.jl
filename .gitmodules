@@ -1,3 +1,3 @@
-[submodule "src/fort_ref"]
+[submodule "deps/fort_ref"]
 	path = deps/fort_ref
-	url = https://github.com/Laura7089/TeaLeaf_ref.git
+	url = gh://Laura7089/TeaLeaf_ref
