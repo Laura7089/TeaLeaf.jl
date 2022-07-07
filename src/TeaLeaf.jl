@@ -3,6 +3,7 @@ module TeaLeaf
 export run
 
 include("wrappers.jl")
+include("Kernels/Kernels.jl")
 
 struct ParallelType
     max_task::Int
