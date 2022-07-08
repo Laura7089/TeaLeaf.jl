@@ -4,7 +4,12 @@ REF_DIR := "./src/ref"
 
 # Get an interactive shell with the package imported
 interactive:
-    julia -i <(echo 'using Revise; using Pkg; Pkg.activate("."); using TeaLeaf')
+    julia -i <( echo '\
+        using Revise, JuliaFormatter, Pkg; \
+        Pkg.activate("."); \
+        using TeaLeaf; \
+        fa = format("."); \
+    ')
 
 # Run TeaLeaf.jl's default entrypoint
 run: # No compile dep since julia handles that for us
