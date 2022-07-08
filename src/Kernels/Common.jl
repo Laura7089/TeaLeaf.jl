@@ -54,7 +54,6 @@ function tea_leaf_common_init_kernel!(
     @assert size(zero_boundary) == 4
 
     # TODO: solve index offsets that fortran's DIMENSION offers
-    # REAL(KIND=8), DIMENSION(x_min-halo_exchange_depth:x_max+halo_exchange_depth,y_min-halo_exchange_depth:y_max+halo_exchange_depth) &
     for param in [density, energy, u, r, w, Kx, Ky, Di, Mi, u0]
         @assert size(param) == (
             x_max + halo_exchange_depth - (x_min - halo_exchange_depth),
@@ -70,19 +69,8 @@ function tea_leaf_common_init_kernel!(
     u0[:, :] = energy .* density
 
     if coef == RECIP_CONDUCTIVITY
-        # use w as temp val
-        # Threads.@threads for k in (y_min-halo_exchange_depth):(y_max+halo_exchange_depth)
-        #     for j in x_min-halo_exchange_depth:(x_max+halo_exchange_depth)
-        #         w[j,k]=1.0/density[j  ,k  ]
-        #     end
-        # end
         w[:, :] = 1.0 ./ density
     elseif coef == CONDUCTIVITY
-        # Threads.@threads for k in (y_min-halo_exchange_depth):(y_max+halo_exchange_depth)
-        #     for j in (x_min-halo_exchange_depth):(x_max+halo_exchange_depth)
-        #         w[j  ,k  ]=density[j  ,k  ]
-        #     end
-        # end
         w[:, :] = density
     end
 
@@ -96,38 +84,15 @@ function tea_leaf_common_init_kernel!(
     # Whether to apply reflective boundary conditions to all external faces
     if !reflective_boundary
         if zero_boundary[CHUNK_LEFT]
-            # Threads.@threads for k in (y_min-halo_exchange_depth):(y_max+halo_exchange_depth)
-            #     for j in (x_min-halo_exchange_depth):x_min
-            #         Kx[j,k]=0.0
-            #     end
-            # end
             Kx[(x_min-halo_exchange_depth):x_min, :] = zeros()
         end
-
         if zero_boundary[CHUNK_RIGHT]
-            # Threads.@threads for  k in (y_min-halo_exchange_depth):(y_max+halo_exchange_depth)
-            #     for j in (x_max + 1):(x_max+halo_exchange_depth)
-            #         Kx[j,k]=0.0
-            #     end
-            # end
             Kx[(x_max+1):(x_max+halo_exchange_depth), :] = zeros()
         end
-
         if zero_boundary[CHUNK_BUTTOM]
-            # Threads.@threads for k in (y_min-halo_exchange_depth):y_min
-            #     for j in (x_min-halo_exchange_depth):(x_max+halo_exchange_depth)
-            #         Ky[j,k]=0.0
-            #     end
-            # end
             Kx[:, (y_min-halo_exchange_depth):y_min] = zeros()
         end
-
         if zero_boundary[CHUNK_TOP]
-            # Threads.@threads for k in (y_max + 1):(y_max+halo_exchange_depth)
-            #     for j in (x_min-halo_exchange_depth):(x_max+halo_exchange_depth)
-            #         Ky[j,k]=0.0
-            #     end
-            # end
             Kx[
                 (x_min-halo_exchange_depth):(x_max+halo_exchange_depth),
                 (y_max+1):(y_max+halo_exchange_depth),
@@ -418,16 +383,14 @@ function tea_block_solve!(
             top = ki + jac_block_size - 1
 
             for j = x_min:x_max
-                k = bottom
-                dp_l[k-bottom] = r[j, k] / Di[j, k]
+                dp_l[1] = r[j, k] / Di[j, k]
 
                 for k = bottom+1:top
                     dp_l[k-bottom] =
                         (r[j, k] - (-Ky[j, k] * ry) * dp_l[k-bottom-1]) * bfp[j, k]
                 end
 
-                k = top
-                z_l[k-bottom] = dp_l[k-bottom]
+                z_l[top-bottom] = dp_l[k-bottom]
 
                 for k = top-1:-1:bottom
                     z_l[k-bottom] = dp_l[k-bottom] - cp[j, k] * z_l[k-bottom+1]
@@ -444,24 +407,21 @@ function tea_block_solve!(
             top = min(ki + jac_block_size - 1, y_max)
 
             for j = x_min:x_max
-                k = bottom
-                dp_l[k-bottom] = r[j, k] / Di[j, k]
+                dp_l[1] = r[j, k] / Di[j, k]
 
                 for k = bottom+1:top
                     dp_l[k-bottom] =
                         (r[j, k] - (-Ky[j, k] * ry) * dp_l[k-bottom-1]) * bfp[j, k]
                 end
 
-                k = top
-                z_l[k-bottom] = dp_l[k-bottom]
+                z_l[top-bottom] = dp_l[k-bottom]
 
-                for k = top-1:-1:bottom
-                    z_l[k-bottom] = dp_l[k-bottom] - cp[j, k] * z_l[k-bottom+1]
-                end
+                # for k = top-1:-1:bottom
+                #     z_l[k-bottom] = dp_l[k-bottom] - cp[j, k] * z_l[k-bottom+1]
+                # end
+                z_l[1:top-bottom] .= dp_l[1:top-bottom] - cp[j, bottom:top] .* z_l[2:top-bottom+1]
 
-                for k = bottom:top
-                    z[j, k] = z_l[k-bottom]
-                end
+                z[j, bottom:top] .= z_l[1:top-bottom]
             end
         end
     end
