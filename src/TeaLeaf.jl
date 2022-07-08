@@ -2,8 +2,8 @@ module TeaLeaf
 
 export run
 
-include("wrappers.jl")
-include("Kernels/Kernels.jl")
+include("./wrappers.jl")
+include("./Kernels/Kernels.jl")
 
 struct ParallelType
     max_task::Int
@@ -16,11 +16,11 @@ global g_version = 1.403
 global g_parallel = ParallelType(0, 0, 0, true)
 global outfile = open("tea.out", "w")
 
-opening_message = """Tea Version $(g_version)
+OPENING = """Tea Version $(g_version)
     MPI Version
     Task Count $(g_parallel.max_task)
     """
-defaultin = """*tea
+DEFAULTIN = """*tea
     state 1 density=100.0 energy=0.0001
     state 2 density=0.1 energy=25.0 geometry=rectangle xmin=0.0 xmax=1.0 ymin=1.0 ymax=2.0g
     state 3 density=0.1 energy=0.1 geometry=rectangle xmin=1.0 xmax=6.0 ymin=1.0 ymax=2.0g
@@ -42,7 +42,7 @@ defaultin = """*tea
 
 function initialise()
     if g_parallel.primary
-        write(outfile, opening_message)
+        write(outfile, OPENING)
         print("Output file tea.out opened. All output will go there.")
     end
 

@@ -1,13 +1,15 @@
 module Common
 
-export tea_leaf_common_init_kernel!
-export tea_leaf_kernel_finalise!
-export tea_block_solve!
-export tea_block_init!
-export tea_leaf_calc_residual_kernel!
-export tea_leaf_calc_2norm_kernel!
-export tea_diag_init!
-export tea_diag_solve!
+using Base.Threads: @threads
+
+export initkernel!
+export kernelfinalise!
+export blocksolve!
+export blockinit!
+export calcresidualkernel!
+export calc2normkernel!
+export diaginit!
+export diagsolve!
 
 CHUNK_LEFT = 1
 CHUNK_RIGHT = 2
@@ -22,18 +24,18 @@ TL_PREC_JAC_BLOCK = 3
 CONDUCTIVITY = 1
 RECIP_CONDUCTIVITY = 2
 
-jac_block_size = 4
-block_size = 1
-kstep = block_size * jac_block_size
+JAC_BLOCK_SIZE = 4
+BLOCK_SIZE = 1
+KSTEP = BLOCK_SIZE * JAC_BLOCK_SIZE
 
-function tea_leaf_common_init_kernel!(
-    x_min::Int,
-    x_max::Int,
-    y_min::Int,
-    y_max::Int,
-    halo_exchange_depth::Int,
-    zero_boundary::Vector{Bool},
-    reflective_boundary::Bool,
+function initkernel!(
+    xmin::Int,
+    xmax::Int,
+    ymin::Int,
+    ymax::Int,
+    haloxdepth::Int,
+    zerobound::Vector{Bool},
+    reflectbound::Bool,
     density::Matrix{Float64},
     energy::Matrix{Float64},
     u::Matrix{Float64},
@@ -51,18 +53,19 @@ function tea_leaf_common_init_kernel!(
     preconditioner_type::Int,
     coef::Int,
 )
-    @assert size(zero_boundary) == 4
+    @assert size(zerobound) == 4
 
     # TODO: solve index offsets that fortran's DIMENSION offers
+    # TODO: convert to julia one-based indexing in for loops
     for param in [density, energy, u, r, w, Kx, Ky, Di, Mi, u0]
         @assert size(param) == (
-            x_max + halo_exchange_depth - (x_min - halo_exchange_depth),
-            y_max + halo_exchange_depth - (y_min - halo_exchange_depth),
+            xmax + haloxdepth - (xmin - haloxdepth),
+            ymax + haloxdepth - (ymin - haloxdepth),
         )
     end
-    # REAL(KIND=8), DIMENSION(x_min:x_max,y_min:y_max) :: cp, bfp
+    # REAL(KIND=8), DIMENSION(xmin:xmax,ymin:ymax) :: cp, bfp
     for param in [cp, bfp]
-        @assert size(param) == (x_max - x_min, y_max - y_min)
+        @assert size(param) == (xmax - xmin, ymax - ymin)
     end
 
     u[:, :] = energy .* density
@@ -74,72 +77,44 @@ function tea_leaf_common_init_kernel!(
         w[:, :] = density
     end
 
-    Threads.@threads for k = (y_min-halo_exchange_depth+1):(y_max+halo_exchange_depth)
-        for j = (x_min-halo_exchange_depth+1):(x_max+halo_exchange_depth)
+    @threads for k = ymin-haloxdepth+1:ymax+haloxdepth
+        for j = xmin-haloxdepth+1:xmax+haloxdepth
             Kx[j, k] = (w[j-1, k] + w[j, k]) / (2.0 * w[j-1, k] * w[j, k])
             Ky[j, k] = (w[j, k-1] + w[j, k]) / (2.0 * w[j, k-1] * w[j, k])
         end
     end
 
     # Whether to apply reflective boundary conditions to all external faces
-    if !reflective_boundary
-        if zero_boundary[CHUNK_LEFT]
-            Kx[(x_min-halo_exchange_depth):x_min, :] = zeros()
+    if !reflectbound
+        if zerobound[CHUNK_LEFT]
+            Kx[xmin-haloxdepth:xmin, :] = zeros()
         end
-        if zero_boundary[CHUNK_RIGHT]
-            Kx[(x_max+1):(x_max+halo_exchange_depth), :] = zeros()
+        if zerobound[CHUNK_RIGHT]
+            Kx[xmax+1:xmax+haloxdepth, :] = zeros()
         end
-        if zero_boundary[CHUNK_BUTTOM]
-            Kx[:, (y_min-halo_exchange_depth):y_min] = zeros()
+        if zerobound[CHUNK_BUTTOM]
+            Kx[:, ymin-haloxdepth:ymin] = zeros()
         end
-        if zero_boundary[CHUNK_TOP]
-            Kx[
-                (x_min-halo_exchange_depth):(x_max+halo_exchange_depth),
-                (y_max+1):(y_max+halo_exchange_depth),
-            ] = zeros()
+        if zerobound[CHUNK_TOP]
+            Kx[xmin-haloxdepth:xmax+haloxdepth, ymax+1:ymax+haloxdepth] = zeros()
         end
     end
 
     # Setup storage for the diagonal entries
-    Threads.@threads for k = (y_min-halo_exchange_depth+1):(y_max+halo_exchange_depth-1)
-        for j = (x_min-halo_exchange_depth+1):(x_max+halo_exchange_depth-1)
+    @threads for k = ymin-haloxdepth+1:ymax+haloxdepth-1
+        for j = xmin-haloxdepth+1:xmax+haloxdepth-1
             Di[j, k] = (1.0 + ry * (Ky[j, k+1] + Ky[j, k]) + rx * (Kx[j+1, k] + Kx[j, k]))
         end
     end
 
     if preconditioner_type == TL_PREC_JAC_BLOCK
-        wrapteablockinit(
-            x_min,
-            x_max,
-            y_min,
-            y_max,
-            halo_exchange_depth,
-            cp,
-            bfp,
-            Kx,
-            Ky,
-            Di,
-            rx,
-            ry,
-        )
+        wrapteablockinit(xmin, xmax, ymin, ymax, haloxdepth, cp, bfp, Kx, Ky, Di, rx, ry)
     elseif preconditioner_type == TL_PREC_JAC_DIAG
-        wrapteadiaginit(
-            x_min,
-            x_max,
-            y_min,
-            y_max,
-            halo_exchange_depth,
-            Mi,
-            Kx,
-            Ky,
-            Di,
-            rx,
-            ry,
-        )
+        wrapteadiaginit(xmin, xmax, ymin, ymax, haloxdepth, Mi, Kx, Ky, Di, rx, ry)
     end
 
-    Threads.@threads for k = y_min:y_max
-        for j = x_min:x_max
+    @threads for k = ymin:ymax
+        for j = xmin:xmax
             w[j, k] =
                 Di[j, k] * u[j, k] - ry * (Ky[j, k+1] * u[j, k+1] + Ky[j, k] * u[j, k-1]) -
                 rx * (Kx[j+1, k] * u[j+1, k] + Kx[j, k] * u[j-1, k])
@@ -151,27 +126,27 @@ function tea_leaf_common_init_kernel!(
     r[:, :] = u - w
 end
 
-function tea_leaf_kernel_finalise!(
-    x_min::Int,
-    x_max::Int,
-    y_min::Int,
-    y_max::Int,
-    halo_exchange_depth::Int,
+function kernelfinalise!(
+    xmin::Int,
+    xmax::Int,
+    ymin::Int,
+    ymax::Int,
+    haloxdepth::Int,
     energy::Matrix{Float64},
     density::Matrix{Float64},
     u::Matrix{Float64},
 )
     for param in [u, energy, density]
         @assert size(param) = (
-            x_max + halo_exchange_depth - (x_min - halo_exchange_depth),
-            y_max + halo_exchange_depth - (y_min - halo_exchange_depth),
+            xmax + haloxdepth - (xmin - haloxdepth),
+            ymax + haloxdepth - (ymin - haloxdepth),
         )
     end
 
     # !$OMP PARALLEL
     # !$OMP DO
-    #   DO k=y_min, y_max
-    #     DO j=x_min, x_max
+    #   DO k=ymin, ymax
+    #     DO j=xmin, xmax
     #       energy(j,k) = u(j,k) / density(j,k)
     #     ENDDO
     #   ENDDO
@@ -180,12 +155,12 @@ function tea_leaf_kernel_finalise!(
     energy[:, :] = u ./ density
 end
 
-function tea_leaf_calc_residual_kernel!(
-    x_min::Int,
-    x_max::Int,
-    y_min::Int,
-    y_max::Int,
-    halo_exchange_depth::Int,
+function calcresidualkernel!(
+    xmin::Int,
+    xmax::Int,
+    ymin::Int,
+    ymax::Int,
+    haloxdepth::Int,
     u::Matrix{Float64},
     u0::Matrix{Float64},
     r::Matrix{Float64},
@@ -197,41 +172,40 @@ function tea_leaf_calc_residual_kernel!(
 )
     for param in [Kx, u, r, Ky, u0, Di]
         @assert size(param) = (
-            x_max + halo_exchange_depth - (x_min - halo_exchange_depth),
-            y_max + halo_exchange_depth - (y_min - halo_exchange_depth),
+            xmax + haloxdepth - (xmin - haloxdepth),
+            ymax + haloxdepth - (ymin - haloxdepth),
         )
     end
 
-    Threads.@threads for k = y_min:y_max
-        for j = x_min:x_max
+    @threads for k = ymin:ymax
+        for j = xmin:xmax
             smvp =
-                Di(j, k) * u(j, k) -
-                ry * (Ky(j, k + 1) * u(j, k + 1) + Ky(j, k) * u(j, k - 1)) -
-                rx * (Kx(j + 1, k) * u(j + 1, k) + Kx(j, k) * u(j - 1, k))
-            r(j, k) = u0(j, k) - smvp
+                Di[j, k] * u[j, k] - ry * (Ky[j, k+1] * u[j, k+1] + Ky[j, k] * u[j, k-1]) -
+                rx * (Kx[j+1, k] * u[j+1, k] + Kx[j, k] * u[j-1, k])
+            r(j, k) = u0[j, k] - smvp
         end
     end
 end
 
 # NOTE: you *must* use the result of this - it won't mutate the norm kernel
-function tea_leaf_calc_2norm_kernel!(
-    x_min::Int,
-    x_max::Int,
-    y_min::Int,
-    y_max::Int,
-    halo_exchange_depth::Int,
+function calc2normkernel!(
+    xmin::Int,
+    xmax::Int,
+    ymin::Int,
+    ymax::Int,
+    haloxdepth::Int,
     arr::Matrix{Float64},
     _::Float64,
 )::Float64
     @assert size(arr) == (
-        x_max + halo_exchange_depth - (x_min - halo_exchange_depth),
-        y_max + halo_exchange_depth - (y_min - halo_exchange_depth),
+        xmax + haloxdepth - (xmin - haloxdepth),
+        ymax + haloxdepth - (ymin - haloxdepth),
     )
 
     # !$OMP PARALLEL
     # !$OMP DO REDUCTION(+:norm)
-    #     DO k=y_min,y_max
-    #         DO j=x_min,x_max
+    #     DO k=ymin,ymax
+    #         DO j=xmin,xmax
     #             norm = norm + arr(j, k)*arr(j, k)
     #         ENDDO
     #     ENDDO
@@ -240,12 +214,12 @@ function tea_leaf_calc_2norm_kernel!(
     return sum(arr .^ 2)
 end
 
-function tea_diag_init!(
-    x_min::Int,
-    x_max::Int,
-    y_min::Int,
-    y_max::Int,
-    halo_exchange_depth::Int,
+function diaginit!(
+    xmin::Int,
+    xmax::Int,
+    ymin::Int,
+    ymax::Int,
+    haloxdepth::Int,
     Mi::Matrix{Float64},
     Kx::Matrix{Float64},
     Ky::Matrix{Float64},
@@ -255,14 +229,14 @@ function tea_diag_init!(
 )
     for param in [Kx, Ky, Di, Mi]
         @assert size(param) == (
-            x_max + halo_exchange_depth - (x_min - halo_exchange_depth),
-            y_max + halo_exchange_depth - (y_min - halo_exchange_depth),
+            xmax + haloxdepth - (xmin - haloxdepth),
+            ymax + haloxdepth - (ymin - haloxdepth),
         )
     end
 
     omega = 1.0
-    Threads.@threads for k = y_min-halo_exchange_depth+1:y_max+halo_exchange_depth-1
-        for j = x_min-halo_exchange_depth+1:x_max+halo_exchange_depth-1
+    @threads for k = ymin-haloxdepth+1:ymax+haloxdepth-1
+        for j = xmin-haloxdepth+1:xmax+haloxdepth-1
             if Di[j, k] != 0.0
                 Mi[j, k] = omega / Di[j, k]
             else
@@ -272,12 +246,12 @@ function tea_diag_init!(
     end
 end
 
-function tea_diag_solve!(
-    x_min::Int,
-    x_max::Int,
-    y_min::Int,
-    y_max::Int,
-    halo_exchange_depth::Int,
+function diagsolve!(
+    xmin::Int,
+    xmax::Int,
+    ymin::Int,
+    ymax::Int,
+    haloxdepth::Int,
     depth::Int,
     r::Matrix{Float64},
     z::Matrix{Float64},
@@ -285,29 +259,29 @@ function tea_diag_solve!(
 )
     for param in [r, z, Mi]
         @assert size(param) == (
-            x_max + halo_exchange_depth - (x_min - halo_exchange_depth),
-            y_max + halo_exchange_depth - (y_min - halo_exchange_depth),
+            xmax + haloxdepth - (xmin - haloxdepth),
+            ymax + haloxdepth - (ymin - haloxdepth),
         )
     end
 
     # !$OMP DO
-    #     DO k=y_min-depth,y_max+depth
-    #       DO j=x_min-depth,x_max+depth
+    #     DO k=ymin-depth,ymax+depth
+    #       DO j=xmin-depth,xmax+depth
     #         z(j, k) = Mi(j, k)*r(j, k)
     #       ENDDO
     #     ENDDO
     # !$OMP END DO
-    xr = x_min-depth:x_max+depth
-    yr = y_min-depth:y_max+depth
+    xr = xmin-depth:xmax+depth
+    yr = ymin-depth:ymax+depth
     z[xr, yr] = Mi[xr, yr] .* r[xr, yr]
 end
 
-function tea_block_init!(
-    x_min::Int,
-    x_max::Int,
-    y_min::Int,
-    y_max::Int,
-    halo_exchange_depth::Int,
+function blockinit!(
+    xmin::Int,
+    xmax::Int,
+    ymin::Int,
+    ymax::Int,
+    haloxdepth::Int,
     cp::Matrix{Float64},
     bfp::Matrix{Float64},
     Kx::Matrix{Float64},
@@ -318,20 +292,20 @@ function tea_block_init!(
 )
     for param in [Kx, Ky, Di]
         @assert size(param) == (
-            x_max + halo_exchange_depth - (x_min - halo_exchange_depth),
-            y_max + halo_exchange_depth - (y_min - halo_exchange_depth),
+            xmax + haloxdepth - (xmin - haloxdepth),
+            ymax + haloxdepth - (ymin - haloxdepth),
         )
     end
 
     for param in [cp, bfp]
-        @assert size(param) == (x_max - x_min, y_max - y_min)
+        @assert size(param) == (xmax - xmin, ymax - ymin)
     end
 
-    Threads.@threads for ko = y_min:jac_block_size:y_max
+    @threads for ko = ymin:JAC_BLOCK_SIZE:ymax
         bottom = ko
-        top = min(ko + jac_block_size - 1, y_max)
+        top = min(ko + JAC_BLOCK_SIZE - 1, ymax)
 
-        for j = x_min:x_max
+        for j = xmin:xmax
             k = bottom
             cp[j, k] = (-Ky[j, k+1] * ry) / Di[j, k]
 
@@ -343,12 +317,12 @@ function tea_block_init!(
     end
 end
 
-function tea_block_solve!(
-    x_min::Int,
-    x_max::Int,
-    y_min::Int,
-    y_max::Int,
-    halo_exchange_depth::Int,
+function blocksolve!(
+    xmin::Int,
+    xmax::Int,
+    ymin::Int,
+    ymax::Int,
+    haloxdepth::Int,
     r::Matrix{Float64},
     z::Matrix{Float64},
     cp::Matrix{Float64},
@@ -361,28 +335,28 @@ function tea_block_solve!(
 )
     for param in [Kx, Ky, Di, r, z]
         @assert size(param) == (
-            x_max + halo_exchange_depth - (x_min - halo_exchange_depth),
-            y_max + halo_exchange_depth - (y_min - halo_exchange_depth),
+            xmax + haloxdepth - (xmin - haloxdepth),
+            ymax + haloxdepth - (ymin - haloxdepth),
         )
     end
 
     for param in [cp, bfp]
-        @assert size(param) == (x_max - x_min, y_max - y_min)
+        @assert size(param) == (xmax - xmin, ymax - ymin)
     end
 
-    dp_l = zeros(jac_block_size - 1)
-    z_l = zeros(jac_block_size - 1)
+    dp_l = zeros(JAC_BLOCK_SIZE - 1)
+    z_l = zeros(JAC_BLOCK_SIZE - 1)
 
-    k_extra = y_max - (y_max % kstep)
+    k_extra = ymax - (ymax % KSTEP)
 
-    Threads.@threads for ko = y_min:kstep:k_extra
-        upper_k = ko + kstep - jac_block_size
+    @threads for ko = ymin:KSTEP:k_extra
+        upper_k = ko + KSTEP - JAC_BLOCK_SIZE
 
-        for ki = ko:jac_block_size:upper_k
+        for ki = ko:JAC_BLOCK_SIZE:upper_k
             bottom = ki
-            top = ki + jac_block_size - 1
+            top = ki + JAC_BLOCK_SIZE - 1
 
-            for j = x_min:x_max
+            for j = xmin:xmax
                 dp_l[1] = r[j, k] / Di[j, k]
 
                 for k = bottom+1:top
@@ -402,11 +376,11 @@ function tea_block_solve!(
             end
         end
 
-        Threads.@threads for ki = k_extra+1:jac_block_size:y_max
-            bottom = min(ki, y_max)
-            top = min(ki + jac_block_size - 1, y_max)
+        @threads for ki = k_extra+1:JAC_BLOCK_SIZE:ymax
+            bottom = min(ki, ymax)
+            top = min(ki + JAC_BLOCK_SIZE - 1, ymax)
 
-            for j = x_min:x_max
+            for j = xmin:xmax
                 dp_l[1] = r[j, k] / Di[j, k]
 
                 for k = bottom+1:top
@@ -416,10 +390,11 @@ function tea_block_solve!(
 
                 z_l[top-bottom] = dp_l[k-bottom]
 
-                # for k = top-1:-1:bottom
+                # for k in top-1:-1:bottom
                 #     z_l[k-bottom] = dp_l[k-bottom] - cp[j, k] * z_l[k-bottom+1]
                 # end
-                z_l[1:top-bottom] .= dp_l[1:top-bottom] - cp[j, bottom:top] .* z_l[2:top-bottom+1]
+                z_l[1:top-bottom] .=
+                    dp_l[1:top-bottom] - cp[j, bottom:top] .* z_l[2:top-bottom+1]
 
                 z[j, bottom:top] .= z_l[1:top-bottom]
             end
