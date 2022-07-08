@@ -85,6 +85,7 @@ function initkernel!(
     end
 
     # Whether to apply reflective boundary conditions to all external faces
+    # TODO: fix zeros() size
     if !reflectbound
         if zerobound[CHUNK_LEFT]
             Kx[xmin-haloxdepth:xmin, :] = zeros()
@@ -108,9 +109,9 @@ function initkernel!(
     end
 
     if preconditioner_type == TL_PREC_JAC_BLOCK
-        wrapteablockinit(xmin, xmax, ymin, ymax, haloxdepth, cp, bfp, Kx, Ky, Di, rx, ry)
+        blockinit(xmin, xmax, ymin, ymax, haloxdepth, cp, bfp, Kx, Ky, Di, rx, ry)
     elseif preconditioner_type == TL_PREC_JAC_DIAG
-        wrapteadiaginit(xmin, xmax, ymin, ymax, haloxdepth, Mi, Kx, Ky, Di, rx, ry)
+        diaginit(xmin, xmax, ymin, ymax, haloxdepth, Mi, Kx, Ky, Di, rx, ry)
     end
 
     @threads for k = ymin:ymax
@@ -302,14 +303,14 @@ function blockinit!(
     end
 
     @threads for ko = ymin:JAC_BLOCK_SIZE:ymax
-        bottom = ko
+        bot = ko
         top = min(ko + JAC_BLOCK_SIZE - 1, ymax)
 
         for j = xmin:xmax
-            k = bottom
+            k = bot
             cp[j, k] = (-Ky[j, k+1] * ry) / Di[j, k]
 
-            for k = bottom+1:top
+            for k = bot+1:top
                 bfp[j, k] = 1.0 / (Di[j, k] - (-Ky[j, k] * ry) * cp[j, k-1])
                 cp[j, k] = (-Ky[j, k+1] * ry) * bfp[j, k]
             end
@@ -353,50 +354,53 @@ function blocksolve!(
         upper_k = ko + KSTEP - JAC_BLOCK_SIZE
 
         for ki = ko:JAC_BLOCK_SIZE:upper_k
-            bottom = ki
+            bot = ki
             top = ki + JAC_BLOCK_SIZE - 1
 
             for j = xmin:xmax
                 dp_l[1] = r[j, k] / Di[j, k]
 
-                for k = bottom+1:top
-                    dp_l[k-bottom] =
-                        (r[j, k] - (-Ky[j, k] * ry) * dp_l[k-bottom-1]) * bfp[j, k]
-                end
+                # for k = bot+1:top
+                #     dp_l[k-bot] =
+                #         (r[j, k] - (-Ky[j, k] * ry) * dp_l[k-bot-1]) * bfp[j, k]
+                # end
+                _r = bot+2:top+1
+                dp_l[2:top-bot+1] .=
+                    (r[j, _r] - (Ky[j, _r] .* -ry) .* dp_l[1:top-bot] .* bfp[j, _r])
 
-                z_l[top-bottom] = dp_l[k-bottom]
+                z_l[top-bot] = dp_l[k-bot]
 
-                for k = top-1:-1:bottom
-                    z_l[k-bottom] = dp_l[k-bottom] - cp[j, k] * z_l[k-bottom+1]
-                end
+                # for k = top-1:-1:bot
+                #     z_l[k-bot] = dp_l[k-bot] - cp[j, k] * z_l[k-bot+1]
+                # end
+                z_l[1:top-bot] .= dp_l[1:top-bot] - cp[j, bot+1:top] .* z_l[2:top-bot+1]
 
-                for k = bottom:top
-                    z[j, k] = z_l[k-bottom]
-                end
+                # for k = bot:top
+                #     z[j, k] = z_l[k-bot]
+                # end
+                z[j, bot+1:top+1] .= z_l[1:top-bot+1]
             end
         end
 
         @threads for ki = k_extra+1:JAC_BLOCK_SIZE:ymax
-            bottom = min(ki, ymax)
+            bot = min(ki, ymax)
             top = min(ki + JAC_BLOCK_SIZE - 1, ymax)
 
             for j = xmin:xmax
                 dp_l[1] = r[j, k] / Di[j, k]
 
-                for k = bottom+1:top
-                    dp_l[k-bottom] =
-                        (r[j, k] - (-Ky[j, k] * ry) * dp_l[k-bottom-1]) * bfp[j, k]
+                for k = bot+1:top
+                    dp_l[k-bot] = (r[j, k] - (-Ky[j, k] * ry) * dp_l[k-bot-1]) * bfp[j, k]
                 end
 
-                z_l[top-bottom] = dp_l[k-bottom]
+                z_l[top-bot] = dp_l[k-bot]
 
-                # for k in top-1:-1:bottom
-                #     z_l[k-bottom] = dp_l[k-bottom] - cp[j, k] * z_l[k-bottom+1]
+                # for k in top-1:-1:bot
+                #     z_l[k-bot] = dp_l[k-bot] - cp[j, k] * z_l[k-bot+1]
                 # end
-                z_l[1:top-bottom] .=
-                    dp_l[1:top-bottom] - cp[j, bottom:top] .* z_l[2:top-bottom+1]
+                z_l[1:top-bot] .= dp_l[1:top-bot] - cp[j, bot:top] .* z_l[2:top-bot+1]
 
-                z[j, bottom:top] .= z_l[1:top-bottom]
+                z[j, bot:top] .= z_l[1:top-bot]
             end
         end
     end
