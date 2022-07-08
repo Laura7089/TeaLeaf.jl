@@ -10,6 +10,10 @@ interactive:
 run: # No compile dep since julia handles that for us
     julia <(echo 'import Pkg; Pkg.activate("."); import TeaLeaf; TeaLeaf.run()')
 
+# Run JuliaFormatter on the project, or a path
+format path="./src":
+    julia <(echo 'using JuliaFormatter; format("{{ path }}")')
+
 # Compile TeaLeaf.jl
 compile:
     julia <(echo 'import Pkg; Pkg.activate("."); import TeaLeaf')
