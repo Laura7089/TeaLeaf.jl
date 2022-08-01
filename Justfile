@@ -5,7 +5,7 @@ REF_DIR := "./src/ref"
 # Get an interactive shell with the package imported
 interactive:
     julia -i <( echo '\
-        using Revise, JuliaFormatter, Pkg; \
+        using Pkg; \
         Pkg.activate("."); \
         using TeaLeaf; \
         fa = format("."); \
