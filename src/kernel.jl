@@ -81,7 +81,7 @@ function local_halos!(chunk::Chunk, settings::Settings)
         (FIELD_SD, sd),
     ]
         if settings.fields_to_exchange[index]
-            update_face!(chunk, settings.halo_depth, buffer)
+            update_face!(chunk, settings.halo_depth, buffer) # Done
         end
     end
 
@@ -90,10 +90,10 @@ end
 # Updates faces in turn.
 function update_face!(chunk::Chunk, halo_depth::Int, buffer::Vector{Float64})
     for (face, updatekernel) in [
-        updateface(CHUNK_LEFT, update_left!),
-        updateface(CHUNK_RIGHT, update_right!),
-        updateface(CHUNK_TOP, update_top!),
-        updateface(CHUNK_BOTTOM, update_bottom!),
+        (CHUNK_LEFT, update_left!),
+        (CHUNK_RIGHT, update_right!),
+        (CHUNK_TOP, update_top!),
+        (CHUNK_BOTTOM, update_bottom!),
     ]
         if chunk.chunk_neighbours[face] == EXTERNAL_FACE
             updatekernel(chunk, halo_depth, buffer)
@@ -393,22 +393,15 @@ function cg_init(
 end
 
 # Calculates w
-function cg_calc_w(
-    x::Int,
-    y::Int,
-    halo_depth::Int,
-    pw::Float64,
-    p::Vector{Float64},
-    w::Vector{Float64},
-)
+function cg_calc_w(chunk::Chunk, halo_depth::Int, pw::Float64)
     pw_temp = 0.0
 
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
-            smvp = SMVP(p)
-            w[index] = smvp
-            pw_temp += w[index] * p[index]
+    for jj = halo_depth+1:chunk.y-halo_depth
+        for kk = halo_depth+1:chunk.x-halo_depth
+            index = kk + jj * chunk.x
+            smvp = SMVP(chunk.p)
+            chunk.w[index] = smvp
+            pw_temp += chunk.w[index] * chunk.p[index]
         end
     end
 
@@ -416,26 +409,16 @@ function cg_calc_w(
 end
 
 # Calculates u and r
-function cg_calc_ur(
-    x::Int,
-    y::Int,
-    halo_depth::Int,
-    alpha::Float64,
-    rrn::Float64,
-    u::Float64,
-    p::Float64,
-    r::Float64,
-    w::Float64,
-)
+function cg_calc_ur(chunk::Chunk, halo_depth::Int, alpha::Float64, rrn::Float64)
     rrn_temp = 0.0
 
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
+    for jj = halo_depth+1:chunk.y-halo_depth
+        for kk = halo_depth+1:chunk.x-halo_depth
+            index = kk + jj * chunk.x
 
-            u[index] += alpha * p[index]
-            r[index] -= alpha * w[index]
-            rrn_temp += r[index] * r[index]
+            chunk.u[index] += alpha * chunk.p[index]
+            chunk.r[index] -= alpha * chunk.w[index]
+            rrn_temp += chunk.r[index] * chunk.r[index]
         end
     end
 
@@ -443,19 +426,12 @@ function cg_calc_ur(
 end
 
 # Calculates p
-function cg_calc_p(
-    x::Int,
-    y::Int,
-    halo_depth::Int,
-    beta::Float64,
-    p::Vector{Float64},
-    r::Vector{Float64},
-)
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
+function cg_calc_p(chunk::Chunk, halo_depth::Int, beta::Float64)
+    for jj = halo_depth+1:chunk.y-halo_depth
+        for kk = halo_depth+1:chunk.x-halo_depth
+            index = kk + jj * chunk.x
 
-            p[index] = beta * p[index] + r[index]
+            chunk.p[index] = beta * chunk.p[index] + chunk.r[index]
         end
     end
 end
@@ -488,7 +464,7 @@ function cheby_init(chunk::Chunk, halo_depth::Int)
         end
     end
 
-    cheby_calc_u(chunk.x, chunk.y, halo_depth, chunk.u, chunk.p)
+    cheby_calc_u(chunk.x, chunk.y, halo_depth, chunk.u, chunk.p) # Done
 end
 
 # The main chebyshev iteration
@@ -503,7 +479,7 @@ function cheby_iterate(chunk::Chunk, alpha::Float64, beta::Float64)
         end
     end
 
-    cheby_calc_u(chunk.x, chunk.y, halo_depth, chunk.u, chunk.p)
+    cheby_calc_u(chunk.x, chunk.y, halo_depth, chunk.u, chunk.p) # Done
 end
 
 # Initialises the Jacobi solver
