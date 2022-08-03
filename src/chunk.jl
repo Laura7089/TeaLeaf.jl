@@ -9,7 +9,7 @@ struct ChunkExtension
     d_reduce_buffer4::Vector{Float64}
 end
 
-struct Chunk
+mutable struct Chunk
     # Solve-wide variables
     dt_init::Float64
 

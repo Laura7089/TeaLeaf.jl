@@ -606,3 +606,38 @@ function finalise(chunk::Chunk, halo_depth::Int)
     index = (halo_depth+1:chunk.x-halo_depth) + (halo_depth+1:chunk.y-halo_depth) * chunk.x
     @. chunk.energy[index] = chunk.u[index] / chunk.density[index]
 end
+
+# TODO: constructor for `Chunk`?
+# Allocates all of the field buffers
+function kernel_initialise(settings::Settings, x::Int, y::Int, chunk::Chunk)
+    @info "Performing this solve with solver" settings.solver_name
+
+    chunk.density0 = Array{Float64}(undef, (x) * (y))
+    chunk.density = Array{Float64}(undef, (x) * (y))
+    chunk.energy0 = Array{Float64}(undef, (x) * (y))
+    chunk.energy = Array{Float64}(undef, (x) * (y))
+    chunk.u = Array{Float64}(undef, (x) * (y))
+    chunk.u0 = Array{Float64}(undef, (x) * (y))
+    chunk.p = Array{Float64}(undef, (x) * (y))
+    chunk.r = Array{Float64}(undef, (x) * (y))
+    chunk.mi = Array{Float64}(undef, (x) * (y))
+    chunk.w = Array{Float64}(undef, (x) * (y))
+    chunk.kx = Array{Float64}(undef, (x) * (y))
+    chunk.ky = Array{Float64}(undef, (x) * (y))
+    chunk.sd = Array{Float64}(undef, (x) * (y))
+    chunk.volume = Array{Float64}(undef, (x) * (y))
+    chunk.x_area = Array{Float64}(undef, (x + 1) * (y))
+    chunk.y_area = Array{Float64}(undef, (x) * (y + 1))
+    chunk.cell_x = Array{Float64}(undef, (x) * (1))
+    chunk.cell_y = Array{Float64}(undef, (1) * (y))
+    chunk.cell_dx = Array{Float64}(undef, (x) * (1))
+    chunk.cell_dy = Array{Float64}(undef, (1) * (y))
+    chunk.vertex_dx = Array{Float64}(undef, (x + 1) * (1))
+    chunk.vertex_dy = Array{Float64}(undef, (1) * (y + 1))
+    chunk.vertex_x = Array{Float64}(undef, (x + 1) * (1))
+    chunk.vertex_y = Array{Float64}(undef, (1) * (y + 1))
+    chunk.cg_alphas = Array{Float64}(undef, (settings.max_iters) * (1))
+    chunk.cg_betas = Array{Float64}(undef, (settings.max_iters) * (1))
+    chunk.cheby_alphas = Array{Float64}(undef, (settings.max_iters) * (1))
+    chunk.cheby_betas = Array{Float64}(undef, (settings.max_iters) * (1))
+end

@@ -23,6 +23,7 @@ function cg_driver(
     end
 
     @info "Iterations" tt
+    return error
 end
 
 # Invokes the CG initialisation kernels
@@ -40,7 +41,7 @@ function cg_init_driver(
     end
 
     # Need to update for the matvec
-    reset_fields_to_exchange(settings) # TODO
+    reset_fields_to_exchange(settings) # Done
     settings.fields_to_exchange[FIELD_U] = true
     settings.fields_to_exchange[FIELD_P] = true
     halo_update_driver(chunks, settings, 1) # Done

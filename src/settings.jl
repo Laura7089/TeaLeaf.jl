@@ -20,7 +20,7 @@ struct State
 end
 
 # The main settings structure
-struct Settings
+mutable struct Settings
     # Log files
     # tea_out_fp::String
 
@@ -71,6 +71,7 @@ struct Settings
     dy::Float64
 end
 
+# TODO: this is really stupid
 Settings() = Settings(
     0,
     typemax(Int),
@@ -107,3 +108,7 @@ Settings() = Settings(
     0.0,
     0.0,
 )
+
+function reset_fields_to_exchange(settings::Settings)
+    settings.fields_to_exchange .= false
+end

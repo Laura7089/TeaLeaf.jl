@@ -44,7 +44,6 @@ function main()
     initialise_application(chunks, settings) # Done
     settings_overload(settings, argc, argv) # TODO
     diffuse(chunks, settings) # Done
-    kernel_finalise_driver(chunks, settings) # TODO
     finalise_comms() # TODO
 end
 

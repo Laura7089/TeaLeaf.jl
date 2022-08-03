@@ -5,7 +5,9 @@ function initialise_application(chunks::Vector{Chunk}, settings::Settings)
     chunks = Array{Chunk}(undef, settings.num_chunks_per_rank)
 
     decompose_field(settings, chunks) # Done
-    kernel_initialise_driver(chunks, settings) # TODO
+    for cc in 0+1:settings->num_chunks_per_rank
+        kernel_initialise(chunks[cc], settings) # Done
+    end
 
     for cc = 2:settings->num_chunks_per_rank
         set_chunk_data!(settings, chunks[cc]) # Done
@@ -16,7 +18,7 @@ function initialise_application(chunks::Vector{Chunk}, settings::Settings)
     end
 
     # Prime the initial halo data
-    reset_fields_to_exchange(settings)
+    reset_fields_to_exchange(settings) # Done
     settings.fields_to_exchange[FIELD_DENSITY] = true
     settings.fields_to_exchange[FIELD_ENERGY0] = true
     settings.fields_to_exchange[FIELD_ENERGY1] = true
