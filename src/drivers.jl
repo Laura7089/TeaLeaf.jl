@@ -15,7 +15,7 @@ function cg_driver(
     for tt = 2:settings.max_iters
         rro, error = cg_main_step_driver(chunks, settings, tt, rro, error) # Done
 
-        halo_update_driver(chunks, settings, 1) # TODO
+        halo_update_driver(chunks, settings, 1) # Done
 
         if sqrt(abs(error)) < settings.eps
             break
@@ -43,7 +43,7 @@ function cg_init_driver(
     reset_fields_to_exchange(settings) # TODO
     settings.fields_to_exchange[FIELD_U] = true
     settings.fields_to_exchange[FIELD_P] = true
-    halo_update_driver(chunks, settings, 1) # TODO
+    halo_update_driver(chunks, settings, 1) # Done
 
     sum_over_ranks(settings, rro) # TODO
 
@@ -92,4 +92,19 @@ function cg_main_step_driver(
     end
 
     return (rrn, rrn)
+end
+
+# Invoke the halo update kernels
+function halo_update_driver(chunks::Vector{Chunk}, settings::Settings, depth::Int)
+    # Check that we actually have exchanges to perform
+    if !is_fields_to_exchange(settings) # TODO
+        return
+    end
+
+    # Looks like this is a no-op in the original with MPI disabled
+    # remote_halo_driver(chunks, settings, depth)
+
+    for cc = 2:settings.num_chunks_per_rank
+        local_halos!(chunks[cc], settings) # Done
+    end
 end

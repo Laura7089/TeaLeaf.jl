@@ -28,7 +28,7 @@ function solve(chunks::Vector{Chunk}, settings::Settings, tt::Int, wallclock_pre
     reset_fields_to_exchange(settings) # TODO
     settings.fields_to_exchange[FIELD_ENERGY1] = true
     settings.fields_to_exchange[FIELD_DENSITY] = true
-    halo_update_driver(chunks, settings, 2) # TODO
+    halo_update_driver(chunks, settings, 2) # Done
 
     error = 1e+10
 

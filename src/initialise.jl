@@ -20,7 +20,7 @@ function initialise_application(chunks::Vector{Chunk}, settings::Settings)
     settings.fields_to_exchange[FIELD_DENSITY] = true
     settings.fields_to_exchange[FIELD_ENERGY0] = true
     settings.fields_to_exchange[FIELD_ENERGY1] = true
-    halo_update_driver(chunks, settings, 2) # TODO
+    halo_update_driver(chunks, settings, 2) # Done
 
     for cc = 0+1:settings->num_chunks_per_rank
         store_energy(chunks[cc]) # Done
