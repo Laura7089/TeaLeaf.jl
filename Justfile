@@ -1,43 +1,33 @@
 #!/usr/bin/env -S just --justfile
 
-REF_DIR := "./src/ref"
+SRC_PATH := "./src"
 
 # Get an interactive shell with the package imported
 interactive:
-    julia -i <( echo '\
+    julia -ie '\
         using Pkg; \
         Pkg.activate("."); \
         using TeaLeaf; \
-        fa() = format("./src"); \
-    ')
+        fa() = format("{{ SRC_PATH }}"); \
+    '
 
 # Run TeaLeaf.jl's default entrypoint
 run: # No compile dep since julia handles that for us
-    julia <(echo 'import Pkg; Pkg.activate("."); import TeaLeaf; TeaLeaf.run()')
+    julia -e 'import Pkg; Pkg.activate("."); import TeaLeaf; TeaLeaf.main()'
 
 # Run JuliaFormatter on the project, or a path
-format path="./src":
-    julia <(echo 'using JuliaFormatter; format("{{ path }}")')
+format path=SRC_PATH:
+    julia -e 'using JuliaFormatter; format("{{ path }}")'
 
 # Compile TeaLeaf.jl
 compile:
-    julia <(echo 'import Pkg; Pkg.activate("."); import TeaLeaf')
-
-# Compile tealeaf fortran reference
-compile_ref:
-    cd "{{ REF_DIR }}" && \
-        make COMPILER=GNU MPI_COMPILER=mpifort C_MPI_COMPILER=mpicc shared
+    julia -e 'import Pkg; Pkg.activate("."); import TeaLeaf'
 
 # Delete Julia TeaLeaf compilation cache
 decompile:
     find ~/.julia/compiled -maxdepth 2 \
         -iname "TeaLeaf" -type d -exec rm -rfv {} \;
 
-# Print a list of functions available in the reference
-ref_funcs: compile_ref
-    @readelf -sW "{{ REF_DIR }}/tea_leaf.so" | grep FUNC
-
 # Clean up run and build artefacts
 clean:
-    rm -fv *.tmp *.out ./deps/build.log
-    cd "{{ REF_DIR }}" && make clean
+    rm -fv *.tmp *.out
