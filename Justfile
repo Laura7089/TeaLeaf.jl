@@ -8,7 +8,7 @@ interactive:
         using Pkg; \
         Pkg.activate("."); \
         using TeaLeaf; \
-        fa = format("."); \
+        fa() = format("./src"); \
     ')
 
 # Run TeaLeaf.jl's default entrypoint
