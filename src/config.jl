@@ -1,14 +1,12 @@
 function read_config(settings::Settings)
     # Open the configuration file
-    open(settings.tea_in_filename, read = true) do
+    open(settings.tea_in_filename, read = true) do tea_in
         # Read all of the settings from the config
-        read_settings(tea_in, settings)
+        read_settings(tea_in, settings) # TODO
 
         # Read in the states
-        states, settings.num_states = read_states(tea_in, settings)
+        states, settings.num_states = read_states(tea_in, settings) # TODO
     end
-
-    initialise_log(settings)
 
     @info "Solution Parameters" settings
 

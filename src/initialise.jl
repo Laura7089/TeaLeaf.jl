@@ -1,11 +1,10 @@
 function initialise_application(chunks::Vector{Chunk}, settings::Settings)
-    states::Vector{State}
-    read_config(settings, states)
+    states = read_config(settings) # Done
 
     chunks = Array{Chunk}(undef, settings.num_chunks_per_rank)
 
     decompose_field(settings, chunks) # Done
-    for cc in 0+1:settings->num_chunks_per_rank
+    for cc = 0+1:settings->num_chunks_per_rank
         kernel_initialise(chunks[cc], settings) # Done
     end
 

@@ -7,7 +7,7 @@ function diffuse(chunks::Vector{Chunk}, settings::Settings)
         wallclock_prev = solve(chunks, settings, tt, wallclock_prev) # Done
     end
 
-    field_summary_driver(chunks, settings, true) # TODO
+    field_summary_driver(chunks, settings, true) # Done
 end
 
 # Performs a solve for a single timestep
@@ -17,9 +17,6 @@ function solve(chunks::Vector{Chunk}, settings::Settings, tt::Int, wallclock_pre
     # Calculate minimum timestep information
     dt = settings.dt_init
     dt = calc_min_timestep(chunks, dt, settings.num_chunks_per_rank) # Done
-
-    # Pick the smallest timestep across all ranks
-    dt = min_over_ranks(settings, dt) # TODO
 
     rx = dt / (settings.dx * settings.dx)
     ry = dt / (settings.dy * settings.dy)
@@ -41,10 +38,10 @@ function solve(chunks::Vector{Chunk}, settings::Settings, tt::Int, wallclock_pre
     end
 
     # Perform solve finalisation tasks
-    solve_finished_driver(chunks, settings) # TODO
+    solve_finished_driver(chunks, settings) # Done
 
     if tt % settings.summary_frequency == 0
-        field_summary_driver(chunks, settings, false) # TODO
+        field_summary_driver(chunks, settings, false) # Done
     end
 
     # TODO replace with @time, etc

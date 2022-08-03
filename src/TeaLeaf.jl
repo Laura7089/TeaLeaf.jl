@@ -37,6 +37,7 @@ include("./initialise.jl")
 include("./kernel.jl")
 include("./drivers.jl")
 include("./diffuse.jl")
+include("./config.jl")
 
 function main()
     settings = Settings() # Done
@@ -44,7 +45,6 @@ function main()
     initialise_application(chunks, settings) # Done
     settings_overload(settings, argc, argv) # TODO
     diffuse(chunks, settings) # Done
-    finalise_comms() # TODO
 end
 
 end
