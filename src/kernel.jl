@@ -579,50 +579,34 @@ end
 
 # Initialises the PPCG solver
 function ppcg_init(chunk::Chunk, halo_depth::Int)
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
-            sd[index] = r[index] / theta
-        end
-    end
+    index = (halo_depth+1:chunk.x-halo_depth) + (halo_depth+1:chunk.y-halo_depth) * chunk.x
+    @. chunk.sd[index] = chunk.r[index] / chunk.theta
 end
 
 # The PPCG inner iteration
 function ppcg_inner_iteration(chunk::Chunk, halo_depth::Int, alpha::Float64, beta::Float64)
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
-            smvp = SMVP(sd)
-            r[index] -= smvp
-            u[index] += sd[index]
-        end
-    end
+    index = (halo_depth+1:chunk.x-halo_depth) + (halo_depth+1:chunk.y-halo_depth) * chunk.x
 
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
-            sd[index] = alpha * sd[index] + beta * r[index]
-        end
-    end
+    smvp = SMVP(chunk.sd)
+    chunk.r[index] .-= smvp
+    chunk.u[index] .+= chunk.sd[index]
+
+    @. chunk.sd[index] = alpha * chunk.sd[index] + beta * chunk.r[index]
 end
 
 # Copies the current u into u0
 function copy_u(chunk::Chunk, halo_depth::Int)
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
-            u0[index] = u[index]
-        end
-    end
+    index = (halo_depth+1:chunk.x-halo_depth) + (halo_depth+1:chunk.y-halo_depth) * chunk.x
+    chunk.u0[index] .= chunk.u[index]
 end
 
 # Calculates the current value of r
 function calculate_residual(chunk::Chunk, halo_depth::Int)
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
-            smvp = SMVP(u)
-            r[index] = u0[index] - smvp
+    for jj = halo_depth+1:chunk.y-halo_depth
+        for kk = halo_depth+1:chunk.x-halo_depth
+            index = kk + jj * chunk.x
+            smvp = SMVP(chunk.u)
+            chunk.r[index] = chunk.u0[index] - smvp
         end
     end
 end
@@ -634,24 +618,12 @@ function calculate_2norm(
     buffer::Vector{Float64},
     norm::Float64,
 )
-    norm_temp = 0.0
-
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
-            norm_temp += buffer[index] * buffer[index]
-        end
-    end
-
-    return norm + norm_temp
+    index = (halo_depth+1:chunk.x-halo_depth) + (halo_depth+1:chunk.y-halo_depth) * chunk.x
+    return sum(buffer[index] .^ 2) + norm
 end
 
 # Finalises the solution
 function finalise(chunk::Chunk, halo_depth::Int)
-    for jj = halo_depth+1:y-halo_depth
-        for kk = halo_depth+1:x-halo_depth
-            index = kk + jj * x
-            energy[index] = u[index] / density[index]
-        end
-    end
+    index = (halo_depth+1:chunk.x-halo_depth) + (halo_depth+1:chunk.y-halo_depth) * chunk.x
+    @. chunk.energy[index] = chunk.u[index] / chunk.density[index]
 end
