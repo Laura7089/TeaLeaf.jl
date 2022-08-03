@@ -27,10 +27,11 @@ const ERROR_SWITCH_MAX = 1.0
 include("./settings.jl")
 include("./chunk.jl")
 include("./initialise.jl")
+include("./kernel.jl")
 
 function main()
-    settings = Settings()
-    chunks = Array{Chunk}(undef, settings.num_chunks_per_rank)
+    settings = Settings() # Done
+    chunks = Array{Chunk}(undef, settings.num_chunks_per_rank) # Done
     initialise_application(chunks, settings)
     settings_overload(settings, argc, argv)
     diffuse(chunks, settings)

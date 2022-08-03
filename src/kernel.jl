@@ -145,13 +145,13 @@ function pack_or_unpack(
 
 #! format: off
 
-     # kernel = @match face begin
-     #     CHUNK_LEFT => pack ? pack_left : unpack_left
-     #     CHUNK_RIGHT => pack ? pack_right : unpack_right
-     #     CHUNK_TOP => pack ? pack_top : unpack_top
-     #     CHUNK_BOTTOM => pack ? pack_bottom : unpack_bottom
-     #     - => throw("Incorrect face provided: ${face}.")
-     # end
+     kernel = @match face begin
+         CHUNK_LEFT => pack ? pack_left : unpack_left
+         CHUNK_RIGHT => pack ? pack_right : unpack_right
+         CHUNK_TOP => pack ? pack_top : unpack_top
+         CHUNK_BOTTOM => pack ? pack_bottom : unpack_bottom
+         - => throw("Incorrect face provided: $(face).")
+     end
 
 #! format: on
     kernel(x, y, depth, halo_depth, field, buffer)
@@ -342,7 +342,7 @@ function cg_init(
     rro::Float64,
 )
     if coefficient != CONDUCTIVITY && coefficient != RECIP_CONDUCTIVITY
-        throw("Coefficient ${coefficient} is not valid.")
+        throw("Coefficient $(coefficient) is not valid.")
     end
 
     for jj = 2:chunk.y
@@ -515,7 +515,7 @@ function jacobi_init(
     ry::Float64,
 )
     if coefficient < CONDUCTIVITY && coefficient < RECIP_CONDUCTIVITY
-        throw("Coefficient ${coefficient} is not valid.")
+        throw("Coefficient $(coefficient) is not valid.")
     end
 
     index = @. (3:chunk.x-1) + (3:chunk.y-1) * chunk.x
