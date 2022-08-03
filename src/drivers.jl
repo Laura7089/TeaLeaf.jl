@@ -1,7 +1,7 @@
 # Performs a full solve with the CG solver kernels
 function cg_driver(
     chunks::Vector{Chunk},
-    settings::Settings{Chunk},
+    settings::Settings,
     rx::Float64,
     ry::Float64,
     error::Float64,
@@ -27,7 +27,7 @@ end
 
 # Invokes the CG initialisation kernels
 function cg_init_driver(
-    chunks::Vector{Chunks},
+    chunks::Vector{Chunk},
     settings::Settings,
     rx::Float64,
     ry::Float64,

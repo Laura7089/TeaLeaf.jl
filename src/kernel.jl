@@ -141,16 +141,19 @@ function pack_or_unpack(
     field::Vector{Float64},
     buffer::Vector{Float64},
 )
-    using Match
 
 #! format: off
 
-     kernel = @match face begin
-         CHUNK_LEFT => pack ? pack_left : unpack_left
-         CHUNK_RIGHT => pack ? pack_right : unpack_right
-         CHUNK_TOP => pack ? pack_top : unpack_top
-         CHUNK_BOTTOM => pack ? pack_bottom : unpack_bottom
-         - => throw("Incorrect face provided: $(face).")
+    kernel = @match (face, pack) begin
+        (CHUNK_LEFT, true) => pack_left
+        (CHUNK_LEFT, false) => unpack_left
+        (CHUNK_RIGHT, true) => pack_right
+        (CHUNK_RIGHT, false) => unpack_right
+        (CHUNK_TOP, true) => pack_top
+        (CHUNK_TOP, false) => unpack_top
+        (CHUNK_BOTTOM, true) => pack_bottom
+        (CHUNK_BOTTOM, false) => unpack_bottom
+        _ => throw("Incorrect face provided: $(face).")
      end
 
 #! format: on

@@ -1,6 +1,12 @@
 module TeaLeaf
 export main
 
+using Match
+
+# TODO: should all the `Vector{X}` parameters in this be views?
+# TODO: all the 2 and 3 starting loop indices are _definitely_ not right
+# TODO: replace all the stride-style indexing with julia matrices
+
 # Global constants
 const MASTER = 0
 
@@ -29,19 +35,21 @@ include("./chunk.jl")
 include("./initialise.jl")
 include("./kernel.jl")
 include("./drivers.jl")
+include("./diffuse.jl")
 
 function main()
     settings = Settings() # Done
     chunks = Array{Chunk}(undef, settings.num_chunks_per_rank) # Done
-    initialise_application(chunks, settings)
-    settings_overload(settings, argc, argv)
-    diffuse(chunks, settings)
-    kernel_finalise_driver(chunks, settings)
+    initialise_application(chunks, settings) # Done
+    settings_overload(settings, argc, argv) # TODO
+    diffuse(chunks, settings) # Done
+    kernel_finalise_driver(chunks, settings) # TODO
 
     # Finalise each individual chunk
     for cc = 0:settings.num_chunks_per_rank
-        finalise_chunk(chunks[cc])
+        finalise_chunk(chunks[cc]) # TODO
     end
+    finalise_comms() # TODO
 end
 
 end
