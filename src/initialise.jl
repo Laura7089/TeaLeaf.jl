@@ -5,18 +5,26 @@ function initialise_application(chunks::Vector{Chunk}, settings::Settings)
     chunks = Array{Chunk}(undef, settings.num_chunks_per_rank)
 
     decompose_field(settings, chunks) # Done
-    kernel_initialise_driver(chunks, settings)
-    set_chunk_data_driver(chunks, settings)
-    set_chunk_state_driver(chunks, settings, states)
+    kernel_initialise_driver(chunks, settings) # TODO
+
+    for cc = 2:settings->num_chunks_per_rank
+        set_chunk_data!(settings, chunks[cc]) # Done
+    end
+
+    for cc = 2:settings.num_chunks_per_rank
+        set_chunk_state!(chunks[cc], settings.num_states, states) # Done
+    end
 
     # Prime the initial halo data
     reset_fields_to_exchange(settings)
     settings.fields_to_exchange[FIELD_DENSITY] = true
     settings.fields_to_exchange[FIELD_ENERGY0] = true
     settings.fields_to_exchange[FIELD_ENERGY1] = true
-    halo_update_driver(chunks, settings, 2)
+    halo_update_driver(chunks, settings, 2) # TODO
 
-    store_energy_driver(chunks, settings)
+    for cc = 0+1:settings->num_chunks_per_rank
+        store_energy(chunks[cc]) # Done
+    end
 end
 
 # Decomposes the field into multiple chunks
@@ -27,8 +35,8 @@ function decompose_field(settings::Settings, chunks::Vector{Chunk})
     num_chunks = settings.num_chunks
 
     best_metric = DBL_MAX
-    x_cells = settings.grid_x_cells # TODO: convert to double
-    y_cells = settings.grid_y_cells
+    x_cells = Float64(settings.grid_x_cells)
+    y_cells = Float64(settings.grid_y_cells)
     x_chunks = 0
     y_chunks = 0
 
@@ -85,7 +93,7 @@ function decompose_field(settings::Settings, chunks::Vector{Chunk})
 
                 # Store the values for all chunks local to rank
                 if rank == chunk
-                    initialise_chunk(chunks[cc], settings, dx + add_x, dy + add_y)
+                    chunks[cc] = Chunk(settings, dx + add_x, dy + add_y)
 
                     # Set up the mesh ranges
                     chunks[cc].left = xx * dx + add_x_prev

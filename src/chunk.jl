@@ -1,4 +1,4 @@
-const FieldBufferType = Float64;
+const FieldBufferType = Float64
 
 # Empty extension point
 struct ChunkExtension
@@ -77,4 +77,34 @@ struct Chunk
     cheby_betas::Vector{Float64}
 
     ext::Vector{ChunkExtension}
+end
+
+# Initialise the chunk
+function Chunk(settings::Settings, x::Int, y::Int)
+    chunk = Chunk()
+    # Initialise the key variables
+    chunk.x = x + settings.halo_depth * 2
+    chunk.y = y + settings.halo_depth * 2
+    chunk.dt_init = settings.dt_init
+
+    # Allocate the neighbour list
+    chunk.neighbours = Array{int}(undef, NUM_FACES)
+
+    # Allocate the MPI comm buffers
+    lr_len = chunk.y * settings.halo_depth * NUM_FIELDS
+    chunk.left_send = Array{double}(undef, lr_len)
+    chunk.left_recv = Array{double}(undef, lr_len)
+    chunk.right_send = Array{double}(undef, lr_len)
+    chunk.right_recv = Array{double}(undef, lr_len)
+
+    tb_len = chunk.x * settings.halo_depth * NUM_FIELDS
+    chunk.top_send = Array{double}(undef, tb_len)
+    chunk.top_recv = Array{double}(undef, tb_len)
+    chunk.bottom_send = Array{double}(undef, tb_len)
+    chunk.bottom_recv = Array{double}(undef, tb_len)
+
+    # Initialise the ChunkExtension, which allows composition of extended
+    # fields specific to individual implementations
+    chunk.ext = ChunkExtension()
+    return chunk
 end

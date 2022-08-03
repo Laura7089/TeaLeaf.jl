@@ -6,6 +6,7 @@ using Match
 # TODO: should all the `Vector{X}` parameters in this be views?
 # TODO: all the 2 and 3 starting loop indices are _definitely_ not right
 # TODO: replace all the stride-style indexing with julia matrices
+# TODO: doc comments -> docstrings
 
 # Global constants
 const MASTER = 0
@@ -44,11 +45,6 @@ function main()
     settings_overload(settings, argc, argv) # TODO
     diffuse(chunks, settings) # Done
     kernel_finalise_driver(chunks, settings) # TODO
-
-    # Finalise each individual chunk
-    for cc = 0:settings.num_chunks_per_rank
-        finalise_chunk(chunks[cc]) # TODO
-    end
     finalise_comms() # TODO
 end
 
