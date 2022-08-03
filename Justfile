@@ -1,19 +1,20 @@
 #!/usr/bin/env -S just --justfile
+set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 
-SRC_PATH := "./src"
+ACTIVATE_CODE := "using Pkg; Pkg.activate(pwd())"
+SRC_PATH := "src"
 
 # Get an interactive shell with the package imported
 interactive:
     julia -ie '\
-        using Pkg; \
-        Pkg.activate("."); \
+        {{ ACTIVATE_CODE }}; \
         using TeaLeaf; \
         fa() = format("{{ SRC_PATH }}"); \
     '
 
 # Run TeaLeaf.jl's default entrypoint
 run: # No compile dep since julia handles that for us
-    julia -e 'import Pkg; Pkg.activate("."); import TeaLeaf; TeaLeaf.main()'
+    julia -e '{{ ACTIVATE_CODE }}; import TeaLeaf; TeaLeaf.main()'
 
 # Run JuliaFormatter on the project, or a path
 format path=SRC_PATH:
@@ -21,7 +22,7 @@ format path=SRC_PATH:
 
 # Compile TeaLeaf.jl
 compile:
-    julia -e 'import Pkg; Pkg.activate("."); import TeaLeaf'
+    julia -e '{{ ACTIVATE_CODE }}; import TeaLeaf'
 
 # Delete Julia TeaLeaf compilation cache
 decompile:
