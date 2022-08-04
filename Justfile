@@ -4,16 +4,11 @@ SRC_PATH := "./src"
 
 # Get an interactive shell with the package imported
 interactive:
-    julia -ie '\
-        using Pkg; \
-        Pkg.activate("."); \
-        using TeaLeaf; \
-        fa() = format("{{ SRC_PATH }}"); \
-    '
+    julia --project -ie 'using TeaLeaf; fa() = format("{{ SRC_PATH }}");'
 
 # Run TeaLeaf.jl's default entrypoint
 run: # No compile dep since julia handles that for us
-    julia -e 'import Pkg; Pkg.activate("."); import TeaLeaf; TeaLeaf.main()'
+    julia --project -e 'import TeaLeaf; TeaLeaf.main()'
 
 # Run JuliaFormatter on the project, or a path
 format path=SRC_PATH:
@@ -21,7 +16,7 @@ format path=SRC_PATH:
 
 # Compile TeaLeaf.jl
 compile:
-    julia -e 'import Pkg; Pkg.activate("."); import TeaLeaf'
+    julia --project -e 'import TeaLeaf'
 
 # Delete Julia TeaLeaf compilation cache
 decompile:
