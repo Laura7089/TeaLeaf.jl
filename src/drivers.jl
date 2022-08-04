@@ -142,14 +142,15 @@ function solve_finished_driver(chunks::Vector{Chunk}, settings::Settings)
     exact_error = 0.0
 
     if settings.check_result
-        for cc in 0+1:settings.num_chunks_per_rank
+        for cc = 0+1:settings.num_chunks_per_rank
             calculate_residual(chunks[cc], settings.halo_depth) # Done
 
-            exact_error = calculate_2norm( chunks[cc], settings.halo_depth, chunks[cc].r, exact_error) # Done
+            exact_error =
+                calculate_2norm(chunks[cc], settings.halo_depth, chunks[cc].r, exact_error) # Done
         end
     end
 
-    for cc in 0+1:settings.num_chunks_per_rank
+    for cc = 0+1:settings.num_chunks_per_rank
         finalise(chunks[cc], settings.halo_depth) # Done
     end
 

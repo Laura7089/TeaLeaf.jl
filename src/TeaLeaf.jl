@@ -2,6 +2,7 @@ module TeaLeaf
 export main
 
 using Match
+using ArgParse
 
 # TODO: should all the `Vector{X}` parameters in this be views?
 # TODO: all the 2 and 3 starting loop indices are _definitely_ not right
@@ -37,13 +38,12 @@ include("./initialise.jl")
 include("./kernel.jl")
 include("./drivers.jl")
 include("./diffuse.jl")
-include("./config.jl")
 
 function main()
     settings = Settings() # Done
     chunks = Array{Chunk}(undef, settings.num_chunks_per_rank) # Done
     initialise_application(chunks, settings) # Done
-    settings_overload(settings, argc, argv) # TODO
+    parse_flags!(settings) # Done
     diffuse(chunks, settings) # Done
 end
 
