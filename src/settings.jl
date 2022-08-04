@@ -7,117 +7,77 @@
 const CONDUCTIVITY = 1
 
 # State list
-struct State
-    defined::Bool
-    density::Float64
-    energy::Float64
-    x_min::Float64
-    y_min::Float64
-    x_max::Float64
-    y_max::Float64
-    radius::Float64
-    geometry::Geometry
+@with_kw mutable struct State
+    density::Float64 = 0.0
+    energy::Float64 = 0.0
+    x_min::Float64 = 0.0
+    y_min::Float64 = 0.0
+    x_max::Float64 = 0.0
+    y_max::Float64 = 0.0
+    radius::Float64 = 0.0
+    geometry::Geometry = Rectangular
 end
 
 # The main settings structure
-mutable struct Settings
-    # Log files
-    # tea_out_fp::String
-
+@with_kw mutable struct Settings
     # Solve-wide constants
-    rank::Int
-    end_step::Int
-    presteps::Int
-    max_iters::Int
-    coefficient::Int
-    ppcg_inner_steps::Int
-    summary_frequency::Int
-    halo_depth::Int
-    num_states::Int
-    num_chunks::Int
-    num_chunks_per_rank::Int
-    num_ranks::Int
-    fields_to_exchange::Vector{Bool}
+    rank::Int = 0
+    end_step::Int = typemax(Int)
+    presteps::Int = 30
+    max_iters::Int = 10_000
+    coefficient::Int = CONDUCTIVITY
+    ppcg_inner_steps::Int = 10
+    summary_frequency::Int = 10
+    halo_depth::Int = 1
+    num_states::Int = 0
+    num_chunks::Int = 1
+    num_chunks_per_rank::Int = 1
+    num_ranks::Int = 1
+    fields_to_exchange::Vector{Bool} = Array{Bool}(undef, 6) # TODO
 
-    is_offload::Bool
+    is_offload::Bool = false
 
-    error_switch::Bool
-    check_result::Bool
-    preconditioner::Bool
+    error_switch::Bool = false
+    check_result::Bool = true
+    preconditioner::Bool = false
 
-    eps::Float64
-    dt_init::Float64
-    end_time::Float64
-    eps_lim::Float64
+    eps::Float64 = 1e-15
+    dt_init::Float64 = 0.1
+    end_time::Float64 = 10.0
+    eps_lim::Float64 = 1e-5
 
     # Input-Output files
-    tea_in_filename::String
-    tea_out_filename::String
-    test_problem_filename::String
+    tea_in_filename::String = "tea.in"
+    tea_out_filename::String = "tea.out"
+    test_problem_filename::String = "tea.problems"
 
-    solver::Solver
-    solver_name::String
+    solver::Solver = CG
+    solver_name::String = ""
 
     # Field dimensions
-    grid_x_cells::Int
-    grid_y_cells::Int
+    grid_x_cells::Int = 10
+    grid_y_cells::Int = 10
 
-    grid_x_min::Float64
-    grid_y_min::Float64
-    grid_x_max::Float64
-    grid_y_max::Float64
+    grid_x_min::Float64 = 0.0
+    grid_y_min::Float64 = 0.0
+    grid_x_max::Float64 = 100.0
+    grid_y_max::Float64 = 100.0
 
-    dx::Float64
-    dy::Float64
+    dx::Float64 = 0.0
+    dy::Float64 = 0.0
 end
-
-# TODO: this is really stupid
-Settings() = Settings(
-    0,
-    typemax(Int),
-    30,
-    10_000,
-    CONDUCTIVITY,
-    10,
-    10,
-    1,
-    0,
-    1,
-    1,
-    1,
-    Array{Bool}(undef, 6),
-    false,
-    0,
-    1,
-    0,
-    1e-15,
-    0.1,
-    10.0,
-    1e-5,
-    "tea.in",
-    "tea.out",
-    "tea.problems",
-    CG,
-    "",
-    10,
-    10,
-    0.0,
-    0.0,
-    100.0,
-    100.0,
-    0.0,
-    0.0,
-)
 
 function reset_fields_to_exchange(settings::Settings)
     settings.fields_to_exchange .= false
 end
 
-function read_config(settings::Settings)
+function read_config!(settings::Settings)
+    states = []
     # Open the configuration file
     open(settings.tea_in_filename, read = true) do tea_in
         while !eof(tea_in)
-            thesplit = split(readline(tea_in), " ")
+            line = readline(tea_in)
+            thesplit = split(line, " ")
             # Read all of the settings from the config
             @match first(thesplit) begin
                 "initial_timestep" => (settings.dt_init = parse(Float64, thesplit[2]))
@@ -143,112 +103,57 @@ function read_config(settings::Settings)
                 "num_chunks_per_rank" =>
                     (settings.num_chunks_per_rank = parse(Int, thesplit[2]))
                 "halo_depth" => (settings.halo_depth = parse(Int, thesplit[2]))
+                "state" => (push!(states, read_state(line, settings)))
             end
         end
-
-        # Read in the states
-        states, settings.num_states = read_states(settings) # Done
     end
 
     @info "Solution Parameters" settings
 
-    for ss = 0:settings.num_states
-        @info "state $(ss)" ss states[ss].density states[ss].energy
-        if ss > 0
-            @info "" states[ss].x_min states[ss].y_min states[ss].x_max states[ss].y_max states[ss].radius states[ss].geometry
-        end
+    for (ss, state) = enumerate(states)
+        @info "state $(ss)" state.density state.energy state.x_min state.y_min state.x_max state.y_max state.radius state.geometry
     end
+
+    settings.num_states = length(states)
     return states
 end
 
-# Read all of the states from the configuration file
-function read_states(settings::Settings)::Tuple(Vector{State}, Int)
-    len = 0
-    line = nothing
-    num_states = 0
+function read_state(line, settings::Settings)::State
+    thesplit = split(line, " ")
 
-    # First find the number of states
-    open(settings.tea_in_filename, read = true) do tea_in
-        while !eof(tea_in)
-            state_num = 0
+    state_num = parse(Int, thesplit[2])
+    state = State()
 
-            line = readline(tea_in)
-            if startswith(line, "state")
-                num_states = max(num_states, parse(Int, split(line)[2]))
+    for pair in split(line, " ")[3:end]
+        (key, val) = split(pair, "=")
+
+        @match key begin
+            "density" => (state.density = parse(Float64, val))
+            "energy" => (state.energy = parse(Float64, val))
+        end
+
+        # State 1 is the default state so geometry irrelevant
+        if state_num > 1
+            @match key begin
+                "xmin" =>
+                (state.x_min = parse(Float64, val) + settings.dx / 100)
+                "ymin" =>
+                (state.y_min = parse(Float64, val) + settings.dy / 100)
+                "xmax" =>
+                (state.x_max = parse(Float64, val) - settings.dx / 100)
+                "ymax" =>
+                (state.y_max = parse(Float64, val) - settings.dy / 100)
+                "radius" => (state.radius = parse(Float64, val))
+                "geometry" => (state.geometry = @match val begin
+                                   "rectangle" => Rectangular
+                                   "circular" => Circular
+                                   "point" => Point
+                               end)
             end
         end
     end
 
-    # Pre-initialise the set of states
-    states = Array{State}(undef, num_states)
-    for ss in eachindex(states)
-        states[ss].defined = false
-    end
-
-    # If a state boundary falls exactly on a cell boundary
-    # then round off can cause the state to be put one cell
-    # further than expected. This is compiler/system dependent.
-    # To avoid this, a state boundary is reduced/increased by a
-    # 100th of a cell width so it lies well within the intended
-    # cell. Because a cell is either full or empty of a specified
-    # state, this small modification to the state extents does
-    # not change the answer.
-    open(settings.tea_in_filename, read = true) do tea_in
-        while !eof(tea_in)
-            state_num = 0
-
-            line = readline(tea_in)
-            thesplit = split(line, " ")
-
-            # State found
-            if startswith("state", line)
-                state_num = parse(Int, thesplit[2])
-                state = states[state_num]
-
-                if state.defined
-                    throw("State number $(state_num) defined twice.")
-                end
-
-                read_value(line, "density", word)
-                state.density = atof(word)
-                read_value(line, "energy", word)
-                state.energy = atof(word)
-
-                for pair in split(line, " ")[3:end]
-                    key = split(pair, "=")[0]
-                    val = split(pair, "=")[1]
-
-                    @match key begin
-                        "density" => (state.density = parse(Float64, val))
-                        "energy" => (state.energy = parse(Float64, val))
-                    end
-
-                    # State 1 is the default state so geometry irrelevant
-                    if state_num > 1
-                        @match key begin
-                            "xmin" =>
-                                (state.x_min = parse(Float64, val) + settings.dx / 100)
-                            "ymin" =>
-                                (state.y_min = parse(Float64, val) + settings.dy / 100)
-                            "xmax" =>
-                                (state.x_max = parse(Float64, val) - settings.dx / 100)
-                            "ymax" =>
-                                (state.y_max = parse(Float64, val) - settings.dy / 100)
-                            "radius" => (state.radius = parse(Float64, val))
-                            "geometry" => (state.geometry = @match val begin
-                                "rectangle" => Rectangular
-                                "circular" => Circular
-                                "point" => Point
-                            end)
-                        end
-                    end
-                end
-                state.defined = true
-            end
-
-            return (states, num_states)
-        end
-    end
+    return state
 end
 
 function parse_flags!(settings::Settings)

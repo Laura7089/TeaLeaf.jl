@@ -1,5 +1,5 @@
 function initialise_application(chunks::Vector{Chunk}, settings::Settings)
-    states = read_config(settings) # Done
+    states = read_config!(settings) # Done
 
     chunks = Array{Chunk}(undef, settings.num_chunks_per_rank)
 
@@ -35,7 +35,7 @@ function decompose_field(settings::Settings, chunks::Vector{Chunk})
 
     num_chunks = settings.num_chunks
 
-    best_metric = DBL_MAX
+    best_metric = typemax(Float64)
     x_cells = Float64(settings.grid_x_cells)
     y_cells = Float64(settings.grid_y_cells)
     x_chunks = 0
