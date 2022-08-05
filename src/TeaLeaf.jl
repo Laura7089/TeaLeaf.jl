@@ -41,9 +41,7 @@ include("./drivers.jl")
 include("./diffuse.jl")
 
 function main()
-    settings = Settings() # Done
-    chunks = Array{Chunk}(undef, settings.num_chunks_per_rank) # Done
-    initialise_application(chunks, settings) # Done
+    settings, chunks = initialise_application() # Done
     parse_flags!(settings) # Done
     diffuse(chunks, settings) # Done
 end

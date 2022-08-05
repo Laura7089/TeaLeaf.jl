@@ -21,7 +21,7 @@ end
 # The main settings structure
 @with_kw mutable struct Settings
     # Solve-wide constants
-    rank::Int = 0
+    rank::Int = 1 # TODO: does MPI.jl use 1-based?
     end_step::Int = typemax(Int)
     presteps::Int = 30
     max_iters::Int = 10_000
@@ -30,6 +30,7 @@ end
     summary_frequency::Int = 10
     halo_depth::Int = 1
     num_states::Int = 0
+    # TODO: remove MPI-related stuff
     num_chunks::Int = 1
     num_chunks_per_rank::Int = 1
     num_ranks::Int = 1
@@ -67,16 +68,14 @@ end
     dy::Float64 = 0.0
 end
 
-function reset_fields_to_exchange(settings::Settings)
-    settings.fields_to_exchange .= false
-end
-
 function read_config!(settings::Settings)
     states = []
     # Open the configuration file
+    @info "Reading configuration from $(settings.tea_in_filename)"
     open(settings.tea_in_filename, read = true) do tea_in
         while !eof(tea_in)
             line = readline(tea_in)
+            @debug "Config line:" line
             thesplit = split(line, " ")
             # Read all of the settings from the config
             @match first(thesplit) begin
@@ -110,8 +109,8 @@ function read_config!(settings::Settings)
 
     @info "Solution Parameters" settings
 
-    for (ss, state) = enumerate(states)
-        @info "state $(ss)" state.density state.energy state.x_min state.y_min state.x_max state.y_max state.radius state.geometry
+    for (ss, state) in enumerate(states)
+        @debug "State $(ss)" state.density state.energy state.x_min state.y_min state.x_max state.y_max state.radius state.geometry
     end
 
     settings.num_states = length(states)
@@ -135,20 +134,16 @@ function read_state(line, settings::Settings)::State
         # State 1 is the default state so geometry irrelevant
         if state_num > 1
             @match key begin
-                "xmin" =>
-                (state.x_min = parse(Float64, val) + settings.dx / 100)
-                "ymin" =>
-                (state.y_min = parse(Float64, val) + settings.dy / 100)
-                "xmax" =>
-                (state.x_max = parse(Float64, val) - settings.dx / 100)
-                "ymax" =>
-                (state.y_max = parse(Float64, val) - settings.dy / 100)
+                "xmin" => (state.x_min = parse(Float64, val) + settings.dx / 100)
+                "ymin" => (state.y_min = parse(Float64, val) + settings.dy / 100)
+                "xmax" => (state.x_max = parse(Float64, val) - settings.dx / 100)
+                "ymax" => (state.y_max = parse(Float64, val) - settings.dy / 100)
                 "radius" => (state.radius = parse(Float64, val))
                 "geometry" => (state.geometry = @match val begin
-                                   "rectangle" => Rectangular
-                                   "circular" => Circular
-                                   "point" => Point
-                               end)
+                    "rectangle" => Rectangular
+                    "circular" => Circular
+                    "point" => Point
+                end)
             end
         end
     end
@@ -156,7 +151,8 @@ function read_state(line, settings::Settings)::State
     return state
 end
 
-function parse_flags!(settings::Settings)
+function parse_flags()::Settings
+    settings = Settings()
     s = ArgParseSettings()
 
     @add_arg_table s begin
@@ -170,13 +166,19 @@ function parse_flags!(settings::Settings)
     end
 
     args = parse_args(s)
-    if args["solver"] != Nothing
-        settings.solver = args["solver"]
+    if !isnothing(args["solver"])
+        @match lowercase(args["solver"]) begin
+            "jacobi" => (settings.solver = Jacobi)
+            "cg" => (settings.solver = CG)
+            "cheby" => (settings.solver = Cheby)
+            "ppcg" => (settings.solver = PPCG)
+        end
     end
-    if args["x"] != Nothing
+    if !isnothing(args["x"])
         settings.grid_x_cells = args["x"]
     end
-    if args["y"] != Nothing
+    if !isnothing(args["y"])
         settings.grid_y_cells = args["y"]
     end
+    return settings
 end

@@ -1,96 +1,73 @@
-function initialise_application(chunks::Vector{Chunk}, settings::Settings)
+function initialise_application()
+    settings = parse_flags()
     states = read_config!(settings) # Done
+    settings.num_chunks = settings.num_ranks * settings.num_chunks_per_rank
 
-    chunks = Array{Chunk}(undef, settings.num_chunks_per_rank)
-
-    decompose_field(settings, chunks) # Done
-    for cc = 0+1:settings->num_chunks_per_rank
-        kernel_initialise(chunks[cc], settings) # Done
+    chunks = decompose_field!(settings) # Done
+    for c in chunks
+        kernel_initialise(chunk, settings) # Done
     end
 
-    for cc = 2:settings->num_chunks_per_rank
-        set_chunk_data!(settings, chunks[cc]) # Done
+    for c in chunks
+        set_chunk_data!(settings, chunk) # Done
     end
 
-    for cc = 2:settings.num_chunks_per_rank
-        set_chunk_state!(chunks[cc], settings.num_states, states) # Done
+    for c in chunks
+        set_chunk_state!(chunk, settings.num_states, states) # Done
     end
 
     # Prime the initial halo data
-    reset_fields_to_exchange(settings) # Done
+    settings.fields_to_exchange .= false
     settings.fields_to_exchange[FIELD_DENSITY] = true
     settings.fields_to_exchange[FIELD_ENERGY0] = true
     settings.fields_to_exchange[FIELD_ENERGY1] = true
     halo_update_driver(chunks, settings, 2) # Done
 
-    for cc = 0+1:settings->num_chunks_per_rank
-        store_energy(chunks[cc]) # Done
+    for c in chunks
+        store_energy(c) # Done
     end
+
+    return (settings, chunks)
 end
 
 # Decomposes the field into multiple chunks
-function decompose_field(settings::Settings, chunks::Vector{Chunk})
+function decompose_field!(settings::Settings)::Vector{Chunk}
+    chunks = Array{Chunk}(undef, settings.num_chunks)
+
     # Calculates the num chunks field is to be decomposed into
-    settings.num_chunks = settings.num_ranks * settings.num_chunks_per_rank
+    x_chunks, y_chunks = begin
+        xc = settings.grid_x_cells
+        yc = settings.grid_y_cells
+        nc = settings.num_chunks
+        allposs = map(x -> (x, div(nc, x)), 1:nc)
 
-    num_chunks = settings.num_chunks
-
-    best_metric = typemax(Float64)
-    x_cells = Float64(settings.grid_x_cells)
-    y_cells = Float64(settings.grid_y_cells)
-    x_chunks = 0
-    y_chunks = 0
-
-    # Decompose by minimal area to perimeter
-    for xx = 3:num_chunks
-        if num_chunks % xx == 0
-            continue
+        _, i = findmin(allposs) do (x, y)
+            perim = (xc / x)^2 + (yc / y)^2
+            area = (xc / x) * (yc / y)
+            perim / area
         end
-
-        # Calculate number of chunks grouped by x split
-        yy = num_chunks / xx
-
-        if num_chunks % yy == 0
-            continue
-        end
-
-        perimeter = ((x_cells / xx) * (x_cells / xx) + (y_cells / yy) * (y_cells / yy)) * 2
-        area = (x_cells / xx) * (y_cells / yy)
-
-        current_metric = perimeter / area
-
-        # Save improved decompositions
-        if current_metric < best_metric
-            x_chunks = xx
-            y_chunks = yy
-            best_metric = current_metric
-        end
+        allposs[i]
     end
 
-    # Check that the decomposition didn't fail
-    if 0 in [x_chunks, y_chunks]
-        @error "Chunk sizes wrong" x_chunks y_chunks
-        throw("Failed to decompose the field with given parameters.")
-    end
+    @info "Chose decomposition:" (x_chunks, y_chunks)
 
-    dx = settings.grid_x_cells / x_chunks
-    dy = settings.grid_y_cells / y_chunks
+    dx, mod_x = divrem(settings.grid_x_cells, x_chunks)
+    dy, mod_y = divrem(settings.grid_y_cells, y_chunks)
 
-    mod_x = settings.grid_x_cells % x_chunks
-    mod_y = settings.grid_y_cells % y_chunks
     add_x_prev = 0
     add_y_prev = 0
 
     # Compute the full decomposition on all ranks
-    for yy = 2:y_chunks
-        add_y = (yy < mod_y)
+    for yy = 1:y_chunks
+        add_y = yy < mod_y
 
-        for xx = 2:x_chunks
-            add_x = (xx < mod_x)
+        for xx = 1:x_chunks
+            add_x = xx < mod_x
+            # TODO: this will first evaluate to 2 at the moment
+            chunk = xx + yy * x_chunks
 
-            for cc = 2:settings->num_chunks_per_rank
-                chunk = xx + yy * x_chunks
-                rank = cc + settings -> rank * settings -> num_chunks_per_rank
+            for cc = 1:settings.num_chunks_per_rank
+                rank = cc + settings.rank * settings.num_chunks_per_rank
 
                 # Store the values for all chunks local to rank
                 if rank == chunk
@@ -120,4 +97,6 @@ function decompose_field(settings::Settings, chunks::Vector{Chunk})
         add_x_prev = 0
         add_y_prev += add_y
     end
+
+    return chunks
 end
