@@ -338,38 +338,33 @@ function cheby_iterate(chunk::Chunk, alpha::Float64, beta::Float64)
 end
 
 # Initialises the Jacobi solver
-function jacobi_init(chunk::Chunk, hd::Int, coefficient::Int, rx::Float64, ry::Float64)
-    if coefficient < CONDUCTIVITY && coefficient < RECIP_CONDUCTIVITY
-        throw("Coefficient $(coefficient) is not valid.")
+function jacobi_init(chunk::Chunk, hd::Int, coef::Int, rx::Float64, ry::Float64)
+    if coef < CONDUCTIVITY && coef < RECIP_CONDUCTIVITY
+        throw("Coefficient $(coef) is not valid.")
     end
 
-    index = @. (3:chunk.x-1) + (3:chunk.y-1) * chunk.x
+    index = @. (1:chunk.x-1) + (1:chunk.y-1) * chunk.x
     temp = chunk.energy[index] .* chunk.density[index]
     chunk.u0[index] .= temp
     chunk.u[index] .= temp
 
     for jj = hd+1:chunk.y-1, kk = hd+1:chunk.x-1
         index = kk + jj * chunk.x
-        densityCentre =
-            (coefficient == CONDUCTIVITY) ? chunk.density[index] :
-            1.0 / chunk.density[index]
-        densityLeft =
-            (coefficient == CONDUCTIVITY) ? chunk.density[index-1] :
-            1.0 / chunk.density[index-1]
-        densityDown =
-            (coefficient == CONDUCTIVITY) ? chunk.density[index-x] :
+        densc = (coef == CONDUCTIVITY) ? chunk.density[index] : 1.0 / chunk.density[index]
+        densl =
+            (coef == CONDUCTIVITY) ? chunk.density[index-1] : 1.0 / chunk.density[index-1]
+        densd =
+            (coef == CONDUCTIVITY) ? chunk.density[index-chunk.x] :
             1.0 / chunk.density[index-chunk.x]
 
-        chunk.kx[index] =
-            rx * (densityLeft + densityCentre) / (2.0 * densityLeft * densityCentre)
-        chunk.ky[index] =
-            ry * (densityDown + densityCentre) / (2.0 * densityDown * densityCentre)
+        chunk.kx[index] = rx * (densl + densc) / (2.0 * densl * densc)
+        chunk.ky[index] = ry * (densd + densc) / (2.0 * densd * densc)
     end
 end
 
 # The main Jacobi solve step
-function jacobi_iterate(chunk::Chunk, hd::Int)
-    index = @. (2:chunk.x) + (2:chunk.y) * chunk.x
+function jacobi_iterate(chunk::Chunk, hd::Int)::Float64
+    index = @. (1:chunk.x) + ((0:chunk.y-1) * chunk.x)
     chunk.r[index] .= chunk.u[index]
 
     err = 0.0

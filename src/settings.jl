@@ -68,6 +68,7 @@ end
     dx::Float64 = 0.0
     dy::Float64 = 0.0
 end
+Broadcast.broadcastable(s::Settings) = Ref(s)
 
 function read_config!(settings::Settings)::Vector{State}
     states = []
@@ -77,33 +78,42 @@ function read_config!(settings::Settings)::Vector{State}
         while !eof(tea_in)
             line = readline(tea_in)
             @debug "Config line:" line
-            thesplit = split(line, " ")
+
+            # TODO: get test problems here too?
+            if startswith(line, "state")
+                push!(states, read_state(line, settings))
+                continue
+            elseif startswith(line, "*") || !occursin("=", line)
+                continue
+            end
+
+            # TODO: rename all the fields that don't match?
             # Read all of the settings from the config
-            @match first(thesplit) begin
-                "initial_timestep" => (settings.dt_init = parse(Float64, thesplit[2]))
-                "end_time" => (settings.end_time = parse(Float64, thesplit[2]))
-                "end_step" => (settings.end_step = parse(Int, thesplit[2]))
-                "xmin" => (settings.grid_x_min = parse(Float64, thesplit[2]))
-                "ymin" => (settings.grid_y_min = parse(Float64, thesplit[2]))
-                "xmax" => (settings.grid_x_max = parse(Float64, thesplit[2]))
-                "ymax" => (settings.grid_y_max = parse(Float64, thesplit[2]))
+            key, val = split(line, "=")
+            @match key begin
+                "initial_timestep" => (settings.dt_init = parse(Float64, val))
+                "xmin" => (settings.grid_x_min = parse(Float64, val))
+                "ymin" => (settings.grid_y_min = parse(Float64, val))
+                "xmax" => (settings.grid_x_max = parse(Float64, val))
+                "ymax" => (settings.grid_y_max = parse(Float64, val))
+                # "tl_max_iters" => (settings.max_iters = parse(Float64, val))
+                "tl_eps" => (settings.eps = parse(Float64, val))
+                # TODO: call flag parsing after this so we don't have to check
                 "x_cells",
-                if settings.grid_x_cells == DEF_GRID_X_CELLS
-                end => (settings.grid_x_cells = parse(Int, thesplit[2]))
+                if settings.grid_x_cells == 10
+                end => (settings.grid_x_cells = parse(Int, val))
                 "y_cells",
-                if settings.grid_y_cells == DEF_GRID_Y_CELLS
-                end => (settings.grid_y_cells = parse(Int, thesplit[2]))
-                "summary_frequency" =>
-                    (settings.summary_frequency = parse(Int, thesplit[2]))
-                "presteps" => (settings.presteps = parse(Int, thesplit[2]))
-                "ppcg_inner_steps" => (settings.ppcg_inner_steps = parse(Int, thesplit[2]))
-                "epslim" => (settings.eps_lim = parse(Float64, thesplit[2]))
-                "max_iters" => (settings.max_iters = parse(Int, thesplit[2]))
-                "eps" => (settings.eps = parse(Float64, thesplit[2]))
-                "num_chunks_per_rank" =>
-                    (settings.num_chunks_per_rank = parse(Int, thesplit[2]))
-                "halo_depth" => (settings.halo_depth = parse(Int, thesplit[2]))
-                "state" => (push!(states, read_state(line, settings)))
+                if settings.grid_y_cells == 10
+                end => (settings.grid_y_cells = parse(Int, val))
+                "epslim" => (settings.eps_lim = parse(Float64, val))
+                # Use other keys as direct field names
+                _ => try
+                    key = Symbol(key)
+                    val = parse(fieldtype(Settings, key), val)
+                    setfield!(settings, key, val)
+                catch
+                    @warn "Unknown setting" line
+                end
             end
         end
     end
@@ -190,11 +200,11 @@ function get_checking_value(settings::Settings)::Float64
         # Get the number of states present in the config file
         while !eof(file)
             thesplit = split(readline(file), " ")
-            params = map(s -> parse(Int64, s), thesplit[1:3])
+            params = parse.(Int64, thesplit[1:3])
             checking_value = parse(Float64, thesplit[4])
 
             # Found the problem in the file
-            if params == (settings.grid_x_cells, settings.grid_y_cells, settings.end_step)
+            if params == [settings.grid_x_cells, settings.grid_y_cells, settings.end_step]
                 return checking_value
             end
         end

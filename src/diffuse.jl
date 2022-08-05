@@ -2,21 +2,16 @@ using Match
 
 # The main timestep loop
 function diffuse(chunks::Vector{Chunk}, settings::Settings)
-    wallclock_prev = 0.0
-    for tt = 2:settings.end_step
-        wallclock_prev = solve(chunks, settings, tt, wallclock_prev) # Done
+    for tt = 1:settings.end_step
+        solve(chunks, settings, tt) # Done
     end
-
     field_summary_driver(chunks, settings, true) # Done
 end
 
 # Performs a solve for a single timestep
-function solve(chunks::Vector{Chunk}, settings::Settings, tt::Int, wallclock_prev::Float64)
-    @info "Timestep $(tt)"
-
+function solve(chunks::Vector{Chunk}, settings::Settings, tt::Int)
     # Calculate minimum timestep information
-    dt = settings.dt_init
-    dt = calc_min_timestep(chunks, dt, settings.num_chunks_per_rank) # Done
+    dt = calc_min_timestep(chunks, settings.dt_init, settings.num_chunks_per_rank) # Done
 
     rx = dt / (settings.dx * settings.dx)
     ry = dt / (settings.dy * settings.dy)
@@ -30,12 +25,13 @@ function solve(chunks::Vector{Chunk}, settings::Settings, tt::Int, wallclock_pre
     error = 1e+10
 
     # Perform the solve with one of the integrated solvers
-    error = @match settings.solver begin
-        JACOBI_SOLVER => jacobi_driver(chunks, settings, rx, ry, error) # TODO
-        CG_SOLVER => cg_driver(chunks, settings, rx, ry, &error) # TODO
-        CHEBY_SOLVER => cheby_driver(chunks, settings, rx, ry, error) # TODO
-        PPCG_SOLVER => ppcg_driver(chunks, settings, rx, ry, error) # TODO
+    solver = @match settings.solver begin
+        Jacobi => jacobi_driver # TODO
+        CG => cg_driver # TODO
+        Cheby => cheby_driver # TODO
+        PPCG => ppcg_driver # TODO
     end
+    error = solver(chunks, settings, rx, ry, error)
 
     # Perform solve finalisation tasks
     solve_finished_driver(chunks, settings) # Done
@@ -44,14 +40,7 @@ function solve(chunks::Vector{Chunk}, settings::Settings, tt::Int, wallclock_pre
         field_summary_driver(chunks, settings, false) # Done
     end
 
-    # TODO replace with @time, etc
-    # double wallclock = settings->wallclock_profile->profiler_entries[0].time
-    # print_and_log(settings, "Wallclock: \t\t%.3lfs\n", wallclock)
-    # print_and_log(settings, "Avg. time per cell: \t%.6e\n",
-    #     (wallclock-*wallclock_prev) /
-    #     (settings->grid_x_cells *
-    #      settings->grid_y_cells))
-    @info "" error
+    @info "Timestep finished" tt error
 end
 
 # Calculate minimum timestep

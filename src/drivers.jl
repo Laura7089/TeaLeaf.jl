@@ -9,7 +9,7 @@ function field_summary_driver(
     temp = 0.0
     mass = 0.0
 
-    for cc = 2:settings.num_chunks_per_rank
+    for cc = 1:settings.num_chunks_per_rank
         vol, ie, temp, mass = field_summary(chunks[cc], settings, vol, mass, ie, temp) # Done
     end
 
@@ -22,11 +22,10 @@ function field_summary_driver(
 
         qa_diff = abs(100.0 * (temp / checking_value) - 100.0)
         if qa_diff < 0.001
-            @info "This run PASSED"
+            @info "This run PASSED" qa_diff
         else
-            @warn "This run FAILED"
+            @warn "This run FAILED" qa_diff
         end
-        @info " Difference is within:" qa_diff
     end
 end
 
@@ -154,4 +153,72 @@ function solve_finished_driver(chunks::Vector{Chunk}, settings::Settings)
 
     settings.fields_to_exchange[FIELD_ENERGY1] = true
     halo_update!(chunks, settings, 1) # Done
+end
+
+# Performs a full solve with the Jacobi solver kernels
+function jacobi_driver(
+    chunks::Vector{Chunk},
+    settings::Settings,
+    rx::Float64,
+    ry::Float64,
+    error::Float64,
+)::Float64
+    jacobi_init_driver(chunks, settings, rx, ry) # Done
+
+    # Iterate till convergence
+    for tt = 1:settings.max_iters
+        error = jacobi_main_step_driver(chunks, settings, tt, error) # Done
+
+        halo_update!(chunks, settings, 1)
+
+        if abs(error) < settings.eps
+            break
+        end
+    end
+
+    @info "Jacobi" tt
+    return error
+end
+
+# Invokes the CG initialisation kernels
+function jacobi_init_driver(
+    chunks::Vector{Chunk},
+    settings::Settings,
+    rx::Float64,
+    ry::Float64,
+)
+    for cc = 1:settings.num_chunks_per_rank
+        jacobi_init(chunks[cc], settings.halo_depth, settings.coefficient, rx, ry)
+
+        copy_u(chunks[cc], settings.halo_depth)
+    end
+
+    # Need to update for the matvec
+    settings.fields_to_exchange .= false
+    settings.fields_to_exchange[FIELD_U] = true
+end
+
+# Invokes the main Jacobi solve kernels
+function jacobi_main_step_driver(
+    chunks::Vector{Chunk},
+    settings::Settings,
+    tt::Int,
+    error::Float64,
+)::Float64 # TODO: returns error
+    for cc = 1:settings.num_chunks_per_rank
+        error += jacobi_iterate(chunks[cc], settings.halo_depth)
+    end
+
+    if tt % 50 == 0
+        halo_update!(chunks, settings, 1)
+
+        for cc = 1:settings.num_chunks_per_rank
+            calculate_residual(chunks[cc], settings)
+
+            # TODO: how does this mutate `error`?
+            run_calculate_2norm(chunks[cc], settings, chunks[cc].r, error)
+        end
+    end
+
+    sum_over_ranks(settings, error)
 end

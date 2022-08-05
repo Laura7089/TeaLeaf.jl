@@ -3,12 +3,8 @@ function initialise_application()
     states = read_config!(settings) # Done
     settings.num_chunks = settings.num_ranks * settings.num_chunks_per_rank
 
-    chunks = decompose_field!(settings) # Done
-
-    for c in chunks
-        set_chunk_data!(settings, c) # Done
-    end
-
+    chunks = decompose_field(settings) # Done
+    set_chunk_data!.(settings, chunks) # Done
     for c in chunks
         set_chunk_state!(c, states) # Done
     end
@@ -20,15 +16,13 @@ function initialise_application()
     settings.fields_to_exchange[FIELD_ENERGY1] = true
     halo_update!(chunks, settings, 2) # Done
 
-    for c in chunks
-        store_energy(c) # Done
-    end
+    store_energy.(chunks) # Done
 
     return (settings, chunks)
 end
 
 # Decomposes the field into multiple chunks
-function decompose_field!(settings::Settings)::Vector{Chunk}
+function decompose_field(settings::Settings)::Vector{Chunk}
     chunks = Array{Chunk}(undef, settings.num_chunks)
 
     # Calculates the chunks field is to be decomposed into
@@ -60,7 +54,6 @@ function decompose_field!(settings::Settings)::Vector{Chunk}
 
         for xx = 1:x_chunks
             add_x = xx < mod_x
-            # TODO: this will first evaluate to 2 at the moment
             cc = xx + yy * x_chunks
 
             # Set up the mesh ranges
@@ -71,10 +64,8 @@ function decompose_field!(settings::Settings)::Vector{Chunk}
 
             # Set up the chunk connectivity
             chunks[cc].neighbours[CHUNK_LEFT] = (xx == 0) ? EXTERNAL_FACE : cc - 1
-            chunks[cc].neighbours[CHUNK_RIGHT] =
-                (xx == x_chunks) ? EXTERNAL_FACE : cc + 1
-            chunks[cc].neighbours[CHUNK_BOTTOM] =
-                (yy == 0) ? EXTERNAL_FACE : cc - x_chunks
+            chunks[cc].neighbours[CHUNK_RIGHT] = (xx == x_chunks) ? EXTERNAL_FACE : cc + 1
+            chunks[cc].neighbours[CHUNK_BOTTOM] = (yy == 0) ? EXTERNAL_FACE : cc - x_chunks
             chunks[cc].neighbours[CHUNK_TOP] =
                 (yy == y_chunks) ? EXTERNAL_FACE : cc + x_chunks
 

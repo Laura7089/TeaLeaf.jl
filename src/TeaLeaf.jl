@@ -9,29 +9,32 @@ using Parameters
 # TODO: all the 2 and 3 starting loop indices are _definitely_ not right
 # TODO: replace all the stride-style indexing with julia matrices
 # TODO: doc comments -> docstrings
+# TODO: fix naming convention
 
 # Global constants
-const MASTER = 0
+@consts begin
+    MASTER = 0
 
-const NUM_FACES = 4
-const CHUNK_LEFT = 1
-const CHUNK_RIGHT = 2
-const CHUNK_BOTTOM = 3
-const CHUNK_TOP = 4
-const EXTERNAL_FACE = -1
+    NUM_FACES = 4
+    CHUNK_LEFT = 1
+    CHUNK_RIGHT = 2
+    CHUNK_BOTTOM = 3
+    CHUNK_TOP = 4
+    EXTERNAL_FACE = -1
 
-const FIELD_DENSITY = 1
-const FIELD_ENERGY0 = 2
-const FIELD_ENERGY1 = 3
-const FIELD_U = 4
-const FIELD_P = 5
-const FIELD_SD = 6
+    FIELD_DENSITY = 1
+    FIELD_ENERGY0 = 2
+    FIELD_ENERGY1 = 3
+    FIELD_U = 4
+    FIELD_P = 5
+    FIELD_SD = 6
 
-const CONDUCTIVITY = 1
-const RECIP_CONDUCTIVITY = 2
+    CONDUCTIVITY = 1
+    RECIP_CONDUCTIVITY = 2
 
-const CG_ITERS_FOR_EIGENVALUES = 20
-const ERROR_SWITCH_MAX = 1.0
+    CG_ITERS_FOR_EIGENVALUES = 20
+    ERROR_SWITCH_MAX = 1.0
+end
 
 include("./settings.jl")
 include("./chunk.jl")
