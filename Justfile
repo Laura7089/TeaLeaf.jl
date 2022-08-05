@@ -2,18 +2,22 @@
 set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 
 SRC_PATH := "src"
+export JULIA_MPI_BINARY := "system"
 
 # Get an interactive shell with the package imported
 interactive:
     julia --project -ie 'using TeaLeaf; fa() = format("{{ SRC_PATH }}");'
+alias i := interactive
 
 # Run TeaLeaf.jl's default entrypoint
 run: # No compile dep since julia handles that for us
-    julia --project -e 'import TeaLeaf; TeaLeaf.main()'
+    julia --project -e 'using TeaLeaf; main()'
+alias r := run
 
 # Run JuliaFormatter on the project, or a path
 format path=SRC_PATH:
     julia -e 'using JuliaFormatter; format("{{ path }}")'
+alias f := format
 
 # Compile TeaLeaf.jl
 compile:
