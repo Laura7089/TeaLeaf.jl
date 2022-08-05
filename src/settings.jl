@@ -5,6 +5,7 @@
 @enum Geometry Rectangular Circular Point
 
 const CONDUCTIVITY = 1
+const NUM_FIELDS = 6
 
 # State list
 @with_kw mutable struct State
@@ -68,7 +69,7 @@ end
     dy::Float64 = 0.0
 end
 
-function read_config!(settings::Settings)
+function read_config!(settings::Settings)::Vector{State}
     states = []
     # Open the configuration file
     @info "Reading configuration from $(settings.tea_in_filename)"
@@ -181,4 +182,24 @@ function parse_flags()::Settings
         settings.grid_y_cells = args["y"]
     end
     return settings
+end
+
+# Fetches the checking value from the test problems file
+function get_checking_value(settings::Settings)::Float64
+    open(settings.test_problem_filename, read = true) do file
+        # Get the number of states present in the config file
+        while !eof(file)
+            thesplit = split(readline(file), " ")
+            params = map(s -> parse(Int64, s), thesplit[1:3])
+            checking_value = parse(Float64, thesplit[4])
+
+            # Found the problem in the file
+            if params == (settings.grid_x_cells, settings.grid_y_cells, settings.end_step)
+                return checking_value
+            end
+        end
+
+        @warn "Problem was not found in the test problems file."
+        return 1.0
+    end
 end

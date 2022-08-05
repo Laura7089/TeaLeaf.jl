@@ -14,18 +14,18 @@ using Parameters
 const MASTER = 0
 
 const NUM_FACES = 4
-const CHUNK_LEFT = 0
-const CHUNK_RIGHT = 1
-const CHUNK_BOTTOM = 2
-const CHUNK_TOP = 3
+const CHUNK_LEFT = 1
+const CHUNK_RIGHT = 2
+const CHUNK_BOTTOM = 3
+const CHUNK_TOP = 4
 const EXTERNAL_FACE = -1
 
-const FIELD_DENSITY = 0
-const FIELD_ENERGY0 = 1
-const FIELD_ENERGY1 = 2
-const FIELD_U = 3
-const FIELD_P = 4
-const FIELD_SD = 5
+const FIELD_DENSITY = 1
+const FIELD_ENERGY0 = 2
+const FIELD_ENERGY1 = 3
+const FIELD_U = 4
+const FIELD_P = 5
+const FIELD_SD = 6
 
 const CONDUCTIVITY = 1
 const RECIP_CONDUCTIVITY = 2
@@ -42,7 +42,6 @@ include("./diffuse.jl")
 
 function main()
     settings, chunks = initialise_application() # Done
-    parse_flags!(settings) # Done
     diffuse(chunks, settings) # Done
 end
 

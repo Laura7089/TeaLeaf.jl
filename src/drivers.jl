@@ -16,8 +16,7 @@ function field_summary_driver(
     if settings.check_result && is_solve_finished
         @info "Checking results..."
 
-        checking_value = 1.0
-        checking_value = get_checking_value(settings, checking_value) # TODO
+        checking_value = get_checking_value(settings) # Done
 
         @info "Expected and actual:" checking_value temp
 
@@ -25,7 +24,7 @@ function field_summary_driver(
         if qa_diff < 0.001
             @info "This run PASSED"
         else
-            @error "This run FAILED"
+            @warn "This run FAILED"
         end
         @info " Difference is within:" qa_diff
     end
@@ -39,16 +38,14 @@ function cg_driver(
     ry::Float64,
     error::Float64,
 ) # TODO: modifies `error`
-    tt::Int
-
     # Perform CG initialisation
-    rro = cg_init_driver(chunks, settings, rx, ry, rro) # Done
+    rro = cg_init_driver(chunks, settings, rx, ry) # Done
 
     # Iterate till convergence
     for tt = 2:settings.max_iters
-        rro, error = cg_main_step_driver(chunks, settings, tt, rro, error) # Done
+        rro, error = cg_main_step_driver(chunks, settings, tt, rro) # Done
 
-        halo_update_driver(chunks, settings, 1) # Done
+        halo_update!(chunks, settings, 1) # Done
 
         if sqrt(abs(error)) < settings.eps
             break
@@ -60,24 +57,18 @@ function cg_driver(
 end
 
 # Invokes the CG initialisation kernels
-function cg_init_driver(
-    chunks::Vector{Chunk},
-    settings::Settings,
-    rx::Float64,
-    ry::Float64,
-    rro::Float64,
-) # TODO: modifies `rro`
+function cg_init_driver(chunks::Vector{Chunk}, settings::Settings, rx::Float64, ry::Float64)
     rro = 0.0
 
     for cc = 2:settings.num_chunks_per_rank
-        cg_init(chunks[cc], settings.halo_depth, settings.coefficient, rx, ry, rro) # Done
+        rro += cg_init(chunks[cc], settings.halo_depth, settings.coefficient, rx, ry) # Done
     end
 
     # Need to update for the matvec
     reset_fields_to_exchange(settings) # Done
     settings.fields_to_exchange[FIELD_U] = true
     settings.fields_to_exchange[FIELD_P] = true
-    halo_update_driver(chunks, settings, 1) # Done
+    halo_update!(chunks, settings, 1) # Done
 
     for cc = 2:settings.num_chunks_per_rank
         copy_u(chunks[cc], settings.halo_depth) # Done
@@ -92,48 +83,55 @@ function cg_main_step_driver(
     settings::Settings,
     tt::Int,
     rro::Float64,
-    error::Float64,
-) # TODO: modifies error and rro
+)::Tuple{Float64,Float64} # TODO: modifies error and rro
     pw = 0.0
 
     for cc = 2:settings.num_chunks_per_rank
-        pw = cg_calc_w(chunks[cc], settings.halo_depth, pw) # Done
+        pw += cg_calc_w(chunks[cc], settings.halo_depth) # Done
     end
 
-    alpha = rro / pw
+    α = rro / pw
     rrn = 0.0
 
     for cc = 2:settings.num_chunks_per_rank
         # TODO: Some redundancy across chunks??
         chunks[cc].cg_alphas[tt] = alpha
 
-        rrn = cg_calc_ur(chunks[cc], settings.halo_depth, alpha, rrn) # Done
+        rrn += cg_calc_ur(chunks[cc], settings.halo_depth, α) # Done
     end
 
-    beta = rrn / rro
+    β = rrn / rro
 
     for cc = 2:settings.num_chunks_per_rank
         # TODO: Some redundancy across chunks??
-        chunks[cc].cg_betas[tt] = beta
+        chunks[cc].cg_betas[tt] = β
 
-        cg_calc_p(chunks[cc], settings.halo_depth, beta) # Done
+        cg_calc_p(chunks[cc], settings.halo_depth, β) # Done
     end
 
     return (rrn, rrn)
 end
 
 # Invoke the halo update kernels
-function halo_update_driver(chunks::Vector{Chunk}, settings::Settings, depth::Int)
+function halo_update!(chunks::Vector{Chunk}, settings::Settings, depth::Int)
     # Check that we actually have exchanges to perform
     if !any(settings.fields_to_exchange)
         return
     end
 
-    # Looks like this is a no-op in the original with MPI disabled
-    # remote_halo_driver(chunks, settings, depth)
-
     for cc = 2:settings.num_chunks_per_rank
-        local_halos!(chunks[cc], settings) # Done
+        for (index, buffer) in [
+            (FIELD_DENSITY, :density),
+            (FIELD_P, :p),
+            (FIELD_ENERGY0, :energy0),
+            (FIELD_ENERGY1, :energy),
+            (FIELD_U, :u),
+            (FIELD_SD, :sd),
+        ]
+            if settings.fields_to_exchange[index]
+                update_face!(chunks[cc], settings.halo_depth, getfield(chunks[cc], buffer)) # Done
+            end
+        end
     end
 end
 
@@ -155,5 +153,5 @@ function solve_finished_driver(chunks::Vector{Chunk}, settings::Settings)
     end
 
     settings.fields_to_exchange[FIELD_ENERGY1] = true
-    halo_update_driver(chunks, settings, 1) # Done
+    halo_update!(chunks, settings, 1) # Done
 end

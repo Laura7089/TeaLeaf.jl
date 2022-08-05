@@ -22,10 +22,10 @@ function solve(chunks::Vector{Chunk}, settings::Settings, tt::Int, wallclock_pre
     ry = dt / (settings.dy * settings.dy)
 
     # Prepare halo regions for solve
-    reset_fields_to_exchange(settings) # Done
+    settings.fields_to_exchange .= false
     settings.fields_to_exchange[FIELD_ENERGY1] = true
     settings.fields_to_exchange[FIELD_DENSITY] = true
-    halo_update_driver(chunks, settings, 2) # Done
+    halo_update!(chunks, settings, 2) # Done
 
     error = 1e+10
 
