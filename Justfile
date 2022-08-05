@@ -1,6 +1,7 @@
 #!/usr/bin/env -S just --justfile
+set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 
-SRC_PATH := "./src"
+SRC_PATH := "src"
 
 # Get an interactive shell with the package imported
 interactive:
