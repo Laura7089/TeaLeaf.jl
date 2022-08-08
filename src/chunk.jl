@@ -1,3 +1,5 @@
+export Chunk
+
 # Empty extension point
 @with_kw mutable struct ChunkExtension
     d_comm_buffer::Vector{Float64}

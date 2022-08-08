@@ -1,5 +1,5 @@
 # The type of solver to be run
-@enum Solver Jacobi CG Cheby PPCG
+@enum Solver JacobiSolver CGSolver ChebySolver PPCGSolver
 
 # The accepted types of state geometry
 @enum Geometry Rectangular Circular Point
@@ -35,7 +35,7 @@ end
     num_chunks::Int = 1
     num_chunks_per_rank::Int = 1
     num_ranks::Int = 1
-    fields_to_exchange::Vector{Bool} = Array{Bool}(undef, 6) # TODO
+    fields_to_exchange::Vector{Bool} = fill(false, 6)
 
     is_offload::Bool = false
 
@@ -53,7 +53,7 @@ end
     tea_out_filename::String = "tea.out"
     test_problem_filename::String = "tea.problems"
 
-    solver::Solver = CG
+    solver::Solver = CGSolver
     solver_name::String = ""
 
     # Field dimensions
@@ -96,7 +96,7 @@ function read_config!(settings::Settings)::Vector{State}
                 "ymin" => (settings.grid_y_min = parse(Float64, val))
                 "xmax" => (settings.grid_x_max = parse(Float64, val))
                 "ymax" => (settings.grid_y_max = parse(Float64, val))
-                # "tl_max_iters" => (settings.max_iters = parse(Float64, val))
+                "tl_max_iters" => (settings.max_iters = parse(Float64, val))
                 "tl_eps" => (settings.eps = parse(Float64, val))
                 # TODO: call flag parsing after this so we don't have to check
                 "x_cells",
@@ -179,10 +179,10 @@ function parse_flags()::Settings
     args = parse_args(s)
     if !isnothing(args["solver"])
         @match lowercase(args["solver"]) begin
-            "jacobi" => (settings.solver = Jacobi)
-            "cg" => (settings.solver = CG)
-            "cheby" => (settings.solver = Cheby)
-            "ppcg" => (settings.solver = PPCG)
+            "jacobi" => (settings.solver = JacobiSolver)
+            "cg" => (settings.solver = CGSolver)
+            "cheby" => (settings.solver = ChebySolver)
+            "ppcg" => (settings.solver = PPCGSolver)
         end
     end
     if !isnothing(args["x"])
@@ -203,8 +203,8 @@ function get_checking_value(settings::Settings)::Float64
             params = parse.(Int64, thesplit[1:3])
             checking_value = parse(Float64, thesplit[4])
 
-            # Found the problem in the file
             if params == [settings.grid_x_cells, settings.grid_y_cells, settings.end_step]
+                # Found the problem in the file
                 return checking_value
             end
         end

@@ -5,6 +5,13 @@ using Match
 using ArgParse
 using Parameters
 
+include("./settings.jl")
+include("./chunk.jl")
+include("./initialise.jl")
+include("./kernel.jl")
+include("./drivers.jl")
+include("./diffuse.jl")
+
 # TODO: should all the `Vector{X}` parameters in this be views?
 # TODO: all the 2 and 3 starting loop indices are _definitely_ not right
 # TODO: replace all the stride-style indexing with julia matrices
@@ -36,12 +43,16 @@ using Parameters
     ERROR_SWITCH_MAX = 1.0
 end
 
-include("./settings.jl")
-include("./chunk.jl")
-include("./initialise.jl")
-include("./kernel.jl")
-include("./drivers.jl")
-include("./diffuse.jl")
+# Sparse Matrix Vector Product
+function SMVP(chunk::Chunk, a::Vector{Float64}, index::Int64)::Float64
+    (
+        1.0 +
+        (chunk.kx[index+1] + chunk.kx[index]) +
+        (chunk.ky[index+chunk.x] + chunk.ky[index])
+    ) * a[index]
+    -(chunk.kx[index+1] * a[index+1] + chunk.kx[index] * a[index-1])
+    -(chunk.ky[index+chunk.x] * a[index+chunk.x] + chunk.ky[index] * a[index-chunk.x])
+end
 
 function main()
     settings, chunks = initialise_application() # Done

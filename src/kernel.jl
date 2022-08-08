@@ -6,7 +6,7 @@ function update_face!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
         (CHUNK_TOP, update_top!),
         (CHUNK_BOTTOM, update_bottom!),
     ]
-        if chunk.chunk_neighbours[face] == EXTERNAL_FACE
+        if chunk.neighbours[face] == EXTERNAL_FACE
             updatekernel(chunk, hd, buffer)
         end
     end
@@ -15,29 +15,29 @@ end
 # Update left halo.
 function update_left!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
     base = (hd+1:chunk.y-hd) .* chunk.x
-    kk = 2:chunk.depth
+    kk = 1:hd
     @. buffer[base+(hd-kk-1)] = buffer[base+(hd+kk)]
 end
 
 # Update right halo.
 function update_right!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
     base = (hd+1:chunk.y-hd) .* chunk.x
-    kk = 2:chunk.depth
+    kk = 1:hd
     @. buffer[base+(chunk.x-hd+kk)] = buffer[base+(chunk.x-hd-1-kk)]
 end
 
 # Update top halo.
 function update_top!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
-    jj = 2:chunk.depth
+    jj = 1:hd
     base = hd+1:chunk.x-hd
     @. buffer[base+(chunk.y-hd+jj)*chunk.x] = buffer[base+(chunk.y-hd-1-jj)*chunk.x]
 end
 
 # Updates bottom halo.
 function update_bottom!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
-    jj = 2:chunk.depth
+    jj = 1:hd
     base = hd+1:chunk.x-hd
-    @. buffer[base+(hd-jj-1)*chunk.x] = buffer[base+(hd+jj)*chunk.x]
+    buffer[@. base + (hd - jj - 1) * chunk.x] .= buffer[@. base + (hd + jj) * chunk.x]
 end
 
 # Either packs or unpacks data from/to buffers.
@@ -199,217 +199,6 @@ function store_energy(chunk::Chunk)
     end
 end
 
-# The field summary kernel
-function field_summary(
-    chunk::Chunk,
-    hd::Int,
-    vol::Vector{Float64},
-    mass::Vector{Float64},
-    ie::Vector{Float64},
-    temp::Vector{Float64},
-)
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        index = kk + jj * chunk.x
-        cellVol = chunk.volume[index]
-        cellMass = cellVol * chunk.density[index]
-        vol += cellVol
-        mass += cellMass
-        ie += cellMass * energy0[index]
-        temp += cellMass * u[index]
-    end
-
-    return (vol, ie, temp, mass)
-end
-
-# Initialises the CG solver
-function cg_init(chunk::Chunk, hd::Int, coefficient::Int, rx::Float64, ry::Float64)
-    if coefficient != CONDUCTIVITY && coefficient != RECIP_CONDUCTIVITY
-        throw("Coefficient $(coefficient) is not valid.")
-    end
-
-    for jj = 2:chunk.y, kk = 2:chunk.x
-        index = kk + jj * chunk.x
-        chunk.p[index] = 0.0
-        chunk.r[index] = 0.0
-        chunk.u[index] = chunk.energy[index] * chunk.density[index]
-    end
-
-    for jj = 3:chunk.y-1, kk = 3:chunk.x-1
-        index = kk + jj * chunk.x
-        chunk.w[index] =
-            (coefficient == CONDUCTIVITY) ? chunk.density[index] :
-            1.0 / chunk.density[index]
-    end
-
-    for jj = hd+1:chunk.y-1, kk = hd+1:chunk.x-1
-        index = kk + jj * chunk.x
-        chunk.kx[index] =
-            rx * (chunk.w[index-1] + chunk.w[index]) /
-            (2.0 * chunk.w[index-1] * chunk.w[index])
-        chunk.ky[index] =
-            ry * (chunk.w[index-x] + chunk.w[index]) /
-            (2.0 * chunk.w[index-x] * chunk.w[index])
-    end
-
-    rro_temp = 0.0
-
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        index = kk + jj * chunk.x
-        smvp = SMVP(chunk.u)
-        chunk.w[index] = smvp
-        chunk.r[index] = chunk.u[index] - chunk.w[index]
-        chunk.p[index] = chunk.r[index]
-        rro_temp += chunk.r[index] * chunk.p[index]
-    end
-
-    return rro_temp
-end
-
-# Calculates w
-function cg_calc_w(chunk::Chunk, hd::Int)
-    pw_temp = 0.0
-
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        index = kk + jj * chunk.x
-        smvp = SMVP(chunk.p)
-        chunk.w[index] = smvp
-        pw_temp += chunk.w[index] * chunk.p[index]
-    end
-
-    return pw_temp
-end
-
-# Calculates u and r
-function cg_calc_ur(chunk::Chunk, hd::Int, alpha::Float64)
-    rrn_temp = 0.0
-
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        index = kk + jj * chunk.x
-
-        chunk.u[index] += alpha * chunk.p[index]
-        chunk.r[index] -= alpha * chunk.w[index]
-        rrn_temp += chunk.r[index] * chunk.r[index]
-    end
-
-    return rrn_temp
-end
-
-# Calculates p
-function cg_calc_p(chunk::Chunk, hd::Int, beta::Float64)
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        index = kk + jj * chunk.x
-
-        chunk.p[index] = beta * chunk.p[index] + chunk.r[index]
-    end
-end
-
-# Calculates the new value for u.
-function cheby_calc_u(x::Int, y::Int, hd::Int, u::Vector{Float64}, p::Vector{Float64})
-    for jj = hd+1:y-hd, kk = hd+1:x-hd
-        index = kk + jj * x
-        u[index] += p[index]
-    end
-end
-
-# Initialises the Chebyshev solver
-function cheby_init(chunk::Chunk, hd::Int)
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        index = kk + jj * chunk.x
-        smvp = SMVP(chunk.u)
-        chunk.w[index] = smvp
-        chunk.r[index] = chunk.u0[index] - chunk.w[index]
-        chunk.p[index] = chunk.r[index] / chunk.theta
-    end
-
-    cheby_calc_u(chunk.x, chunk.y, hd, chunk.u, chunk.p) # Done
-end
-
-# The main chebyshev iteration
-function cheby_iterate(chunk::Chunk, alpha::Float64, beta::Float64)
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        index = kk + jj * chunk.x
-        smvp = SMVP(chunk.u)
-        chunk.w[index] = smvp
-        chunk.r[index] = chunk.u0[index] - chunk.w[index]
-        chunk.p[index] = alpha * chunk.p[index] + beta * chunk.r[index]
-    end
-
-    cheby_calc_u(chunk.x, chunk.y, hd, chunk.u, chunk.p) # Done
-end
-
-# Initialises the Jacobi solver
-function jacobi_init(chunk::Chunk, hd::Int, coef::Int, rx::Float64, ry::Float64)
-    if coef < CONDUCTIVITY && coef < RECIP_CONDUCTIVITY
-        throw("Coefficient $(coef) is not valid.")
-    end
-
-    index = @. (1:chunk.x-1) + (1:chunk.y-1) * chunk.x
-    temp = chunk.energy[index] .* chunk.density[index]
-    chunk.u0[index] .= temp
-    chunk.u[index] .= temp
-
-    for jj = hd+1:chunk.y-1, kk = hd+1:chunk.x-1
-        index = kk + jj * chunk.x
-        densc = (coef == CONDUCTIVITY) ? chunk.density[index] : 1.0 / chunk.density[index]
-        densl =
-            (coef == CONDUCTIVITY) ? chunk.density[index-1] : 1.0 / chunk.density[index-1]
-        densd =
-            (coef == CONDUCTIVITY) ? chunk.density[index-chunk.x] :
-            1.0 / chunk.density[index-chunk.x]
-
-        chunk.kx[index] = rx * (densl + densc) / (2.0 * densl * densc)
-        chunk.ky[index] = ry * (densd + densc) / (2.0 * densd * densc)
-    end
-end
-
-# The main Jacobi solve step
-function jacobi_iterate(chunk::Chunk, hd::Int)::Float64
-    index = @. (1:chunk.x) + ((0:chunk.y-1) * chunk.x)
-    chunk.r[index] .= chunk.u[index]
-
-    err = 0.0
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        index = kk + jj * chunk.x
-        chunk.u[index] =
-            (
-                chunk.u0[index] +
-                (
-                    chunk.kx[index+1] * chunk.r[index+1] +
-                    chunk.kx[index] * chunk.r[index-1]
-                ) +
-                (
-                    chunk.ky[index+chunk.x] * chunk.r[index+chunk.x] +
-                    chunk.ky[index] * chunk.r[index-chunk.x]
-                )
-            ) / (
-                1.0 +
-                (chunk.kx[index] + chunk.kx[index+1]) +
-                (chunk.ky[index] + chunk.ky[index+chunk.x])
-            )
-
-        err += abs(chunk.u[index] - chunk.r[index])
-    end
-
-    return err
-end
-
-# Initialises the PPCG solver
-function ppcg_init(chunk::Chunk, hd::Int)
-    index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
-    @. chunk.sd[index] = chunk.r[index] / chunk.theta
-end
-
-# The PPCG inner iteration
-function ppcg_inner_iteration(chunk::Chunk, hd::Int, alpha::Float64, beta::Float64)
-    index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
-
-    smvp = SMVP(chunk.sd)
-    chunk.r[index] .-= smvp
-    chunk.u[index] .+= chunk.sd[index]
-
-    @. chunk.sd[index] = alpha * chunk.sd[index] + beta * chunk.r[index]
-end
-
 # Copies the current u into u0
 function copy_u(chunk::Chunk, hd::Int)
     index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
@@ -418,15 +207,17 @@ end
 
 # Calculates the current value of r
 function calculate_residual(chunk::Chunk, hd::Int)
-    smvp = SMVP(chunk.u)
-    index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
-    @. chunk.r[index] = chunk.u0[index] - smvp
+    for kk in (hd:chunk.y-hd-1), jj in (hd+1:chunk.x-hd)
+        index = jj + kk * chunk.x
+        smvp = SMVP(chunk, chunk.u, index)
+        chunk.r[index] = chunk.u0[index] - smvp
+    end
 end
 
 # Calculates the 2 norm of a given buffer
-function calculate_2norm(chunk::Chunk, hd::Int, buffer::Vector{Float64}, norm::Float64)
+function calculate_2norm(chunk::Chunk, hd::Int, buffer::Vector{Float64})
     index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
-    return sum(buffer[index] .^ 2) + norm
+    return sum(buffer[index] .^ 2)
 end
 
 # Finalises the solution
