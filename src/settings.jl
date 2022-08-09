@@ -1,6 +1,3 @@
-# The type of solver to be run
-@enum Solver JacobiSolver CGSolver ChebySolver PPCGSolver
-
 # The accepted types of state geometry
 @enum Geometry Rectangular Circular Point
 
@@ -53,7 +50,7 @@ end
     tea_out_filename::String = "tea.out"
     test_problem_filename::String = "tea.problems"
 
-    solver::Solver = CGSolver
+    solver::Module = CG
     solver_name::String = ""
 
     # Field dimensions
@@ -169,7 +166,7 @@ function parse_flags()::Settings
     @add_arg_table s begin
         "--solver", "-s"
         help = "Can be 'cg', 'cheby', 'ppcg', or 'jacobi'"
-        arg_type = Solver
+        arg_type = Module
         "-x"
         arg_type = Int
         "-y"
@@ -179,10 +176,10 @@ function parse_flags()::Settings
     args = parse_args(s)
     if !isnothing(args["solver"])
         @match lowercase(args["solver"]) begin
-            "jacobi" => (settings.solver = JacobiSolver)
-            "cg" => (settings.solver = CGSolver)
-            "cheby" => (settings.solver = ChebySolver)
-            "ppcg" => (settings.solver = PPCGSolver)
+            "jacobi" => (settings.solver = Jacobi)
+            "cg" => (settings.solver = CG)
+            "cheby" => (settings.solver = Cheby)
+            "ppcg" => (settings.solver = PPCG)
         end
     end
     if !isnothing(args["x"])

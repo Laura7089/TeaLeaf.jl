@@ -1,5 +1,7 @@
 using Match
 
+const ERROR_START = 1e+10
+
 # The main timestep loop
 function diffuse(chunks::Vector{Chunk}, settings::Settings)
     for tt = 1:settings.end_step
@@ -13,16 +15,11 @@ function diffuse(chunks::Vector{Chunk}, settings::Settings)
         settings.fields_to_exchange .= false
         settings.fields_to_exchange[FIELD_ENERGY1] = true
         settings.fields_to_exchange[FIELD_DENSITY] = true
-        halo_update!(chunks, settings, 2) # Done
+        # TODO: is depth=1 correct here?
+        halo_update!(chunks, settings, 1) # Done
 
         # Perform the solve with one of the integrated solvers
-        solver = @match settings.solver begin
-            JacobiSolver => Jacobi.driver # Done
-            CGSolver => CG.driver # TODO
-            ChebySolver => cheby_driver # TODO
-            PPCGSolver => ppcg_driver # TODO
-        end
-        error = solver(chunks, settings, rx, ry, 1e+10)
+        error = settings.solver.driver(chunks, settings, rx, ry)
 
         # Perform solve finalisation tasks
         solve_finished_driver(chunks, settings) # Done

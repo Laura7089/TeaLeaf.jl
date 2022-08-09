@@ -46,8 +46,8 @@ function halo_update!(chunks::Vector{Chunk}, settings::Settings, depth::Int)
         return
     end
 
-    for c in chunks
-        for (index, buffer) in [
+    for c in chunks,
+        (index, buffer) in [
             (FIELD_DENSITY, :density),
             (FIELD_P, :p),
             (FIELD_ENERGY0, :energy0),
@@ -55,20 +55,20 @@ function halo_update!(chunks::Vector{Chunk}, settings::Settings, depth::Int)
             (FIELD_U, :u),
             (FIELD_SD, :sd),
         ]
-            if settings.fields_to_exchange[index]
-                update_face!(c, settings.halo_depth, getfield(c, buffer))
-            end
+
+        if settings.fields_to_exchange[index]
+            update_face!(c, settings.halo_depth, depth, getfield(c, buffer))
         end
     end
 end
 
 # Calls all kernels that wrap up a solve regardless of solver
-function solve_finished_driver(chunks::Vector{Chunk}, settings::Settings)
+function solve_finished!(chunks::Vector{Chunk}, settings::Settings)
     exact_error = 0.0
 
     if settings.check_result
         for c in chunks
-            calculate_residual(c, settings.halo_depth) # Done
+            calculate_residual!(c, settings.halo_depth) # Done
 
             exact_error += calculate_2norm(c, settings.halo_depth, c.r) # Done
         end

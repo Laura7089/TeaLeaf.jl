@@ -2,6 +2,8 @@ module CG
 
 import ..Chunk
 import ..Settings
+import ..CONDUCTIVITY
+import ..SMVP
 
 # Performs a full solve with the CG solver kernels
 function driver(
@@ -9,14 +11,15 @@ function driver(
     settings::Settings,
     rx::Float64,
     ry::Float64,
-    error::Float64,
-) # TODO: modifies `error`
+)::Float64 # TODO: modifies `error`
     # Perform CG initialisation
-    rro = init_driver(chunks, settings, rx, ry) # Done
+    rro = init_driver!(chunks, settings, rx, ry) # Done
+
+    error = ERROR_START
 
     # Iterate till convergence
     for tt = 1:settings.max_iters
-        rro, error = main_step_driver(chunks, settings, tt, rro) # Done
+        rro, error = main_step(chunks, settings, tt, rro) # Done
 
         halo_update!(chunks, settings, 1) # Done
 
@@ -30,8 +33,8 @@ function driver(
 end
 
 # Invokes the CG initialisation kernels
-function init_driver(chunks::Vector{Chunk}, set::Settings, rx::Float64, ry::Float64)
-    rro = init.(chunks, set.halo_depth, set.coefficient, rx, ry) |> sum
+function init_driver!(chunks::Vector{Chunk}, set::Settings, rx::Float64, ry::Float64)
+    rro = init!.(chunks, set.halo_depth, set.coefficient, rx, ry) |> sum
 
     # Need to update for the matvec
     reset_fields_to_exchange(settings) # Done
@@ -45,7 +48,7 @@ function init_driver(chunks::Vector{Chunk}, set::Settings, rx::Float64, ry::Floa
 end
 
 # Invokes the main CG solve kernels
-function main_step_driver(
+function main_step(
     chunks::Vector{Chunk},
     settings::Settings,
     tt::Int,
@@ -76,13 +79,13 @@ function main_step_driver(
 end
 
 # Initialises the CG solver
-function init(chunk::Chunk, hd::Int, coefficient::Int, rx::Float64, ry::Float64)
+function init!(chunk::Chunk, hd::Int, coefficient::Int, rx::Float64, ry::Float64)
     if coefficient != CONDUCTIVITY && coefficient != RECIP_CONDUCTIVITY
         throw("Coefficient $(coefficient) is not valid.")
     end
 
     for jj = 1:chunk.y, kk = 1:chunk.x
-        index = kk + jj * chunk.x
+        index = kk + (jj-1) * chunk.x
         chunk.u[index] = chunk.energy[index] * chunk.density[index]
     end
     chunk.p .= 0.0
@@ -101,8 +104,8 @@ function init(chunk::Chunk, hd::Int, coefficient::Int, rx::Float64, ry::Float64)
             rx * (chunk.w[index-1] + chunk.w[index]) /
             (2.0 * chunk.w[index-1] * chunk.w[index])
         chunk.ky[index] =
-            ry * (chunk.w[index-x] + chunk.w[index]) /
-            (2.0 * chunk.w[index-x] * chunk.w[index])
+            ry * (chunk.w[index-chunk.x] + chunk.w[index]) /
+            (2.0 * chunk.w[index-chunk.x] * chunk.w[index])
     end
 
     rro_temp = 0.0

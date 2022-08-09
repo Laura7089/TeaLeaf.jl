@@ -14,9 +14,10 @@ function initialise_application()
     settings.fields_to_exchange[FIELD_DENSITY] = true
     settings.fields_to_exchange[FIELD_ENERGY0] = true
     settings.fields_to_exchange[FIELD_ENERGY1] = true
-    halo_update!(chunks, settings, 2) # Done
+    # TODO: is depth=1 correct here?
+    halo_update!(chunks, settings, 1) # Done
 
-    store_energy.(chunks) # Done
+    store_energy!.(chunks) # Done
 
     return (settings, chunks)
 end

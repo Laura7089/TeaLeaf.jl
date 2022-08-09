@@ -9,14 +9,24 @@ function driver(
     settings::Settings,
     rx::Float64,
     ry::Float64,
-    error::Float64,
 )::Float64
-    init_driver(chunks, settings, rx, ry) # Done
+    init_driver!(chunks, settings, rx, ry) # Done
     final_time = 0
+    error = ERROR_START
 
     # Iterate till convergence
     for tt = 1:settings.max_iters
-        error += main_step_driver(chunks, settings, tt) # Done
+        error += iterate!.(chunks, settings.halo_depth) |> sum
+
+        if tt % 50 == 0
+            halo_update!(chunks, settings, 1)
+
+            for c in chunks
+                calculate_residual!(c, settings.halo_depth)
+                error += calculate_2norm(c, settings.halo_depth, c.r)
+            end
+        end
+
         @debug "" error
 
         halo_update!(chunks, settings, 1)
@@ -31,11 +41,10 @@ function driver(
     return error
 end
 
-# Invokes the CG initialisation kernels
-function init_driver(chunks::Vector{Chunk}, settings::Settings, rx::Float64, ry::Float64)
+function init_driver!(chunks::Vector{Chunk}, settings::Settings, rx::Float64, ry::Float64)
     for c in chunks
-        init(c, settings.halo_depth, settings.coefficient, rx, ry)
-        copy_u(c, settings.halo_depth)
+        init!(c, settings.halo_depth, settings.coefficient, rx, ry)
+        copy_u!(c, settings.halo_depth)
     end
 
     # Need to update for the matvec
@@ -43,25 +52,7 @@ function init_driver(chunks::Vector{Chunk}, settings::Settings, rx::Float64, ry:
     settings.fields_to_exchange[FIELD_U] = true
 end
 
-# Invokes the main Jacobi solve kernels
-function main_step_driver(chunks::Vector{Chunk}, settings::Settings, tt::Int)::Float64 # TODO: returns error
-    error = iterate.(chunks, settings.halo_depth) |> sum
-
-    if tt % 50 == 0
-        halo_update!(chunks, settings, 1)
-
-        for c in chunks
-            calculate_residual(c, settings.halo_depth)
-            # TODO: how does this mutate `error`?
-            error += calculate_2norm(c, settings.halo_depth, c.r)
-        end
-    end
-
-    return error
-end
-
-# Initialises the Jacobi solver
-function init(chunk::Chunk, hd::Int, coef::Int, rx::Float64, ry::Float64)
+function init!(chunk::Chunk, hd::Int, coef::Int, rx::Float64, ry::Float64)
     if coef < CONDUCTIVITY && coef < RECIP_CONDUCTIVITY
         throw("Coefficient $(coef) is not valid.")
     end
@@ -85,7 +76,6 @@ function init(chunk::Chunk, hd::Int, coef::Int, rx::Float64, ry::Float64)
     end
 end
 
-# The main Jacobi solve step
 function iterate(chunk::Chunk, hd::Int)::Float64
     index = @. (1:chunk.x) + ((0:chunk.y-1) * chunk.x)
     chunk.r[index] .= chunk.u[index]

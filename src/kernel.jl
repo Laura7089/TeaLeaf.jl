@@ -1,5 +1,5 @@
 # Updates faces in turn.
-function update_face!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
+function update_face!(chunk::Chunk, hd::Int, depth::Int, buffer::Vector{Float64})
     for (face, updatekernel) in [
         (CHUNK_LEFT, update_left!),
         (CHUNK_RIGHT, update_right!),
@@ -7,37 +7,40 @@ function update_face!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
         (CHUNK_BOTTOM, update_bottom!),
     ]
         if chunk.neighbours[face] == EXTERNAL_FACE
-            updatekernel(chunk, hd, buffer)
+            updatekernel(chunk, hd, depth, buffer)
         end
     end
 end
 
 # Update left halo.
-function update_left!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
-    base = (hd+1:chunk.y-hd) .* chunk.x
-    kk = 1:hd
-    @. buffer[base+(hd-kk-1)] = buffer[base+(hd+kk)]
+function update_left!(chunk::Chunk, hd::Int, depth::Int, buffer::Vector{Float64})
+    for jj = hd+1:chunk.y-hd, kk = 1:depth
+        base = jj * chunk.x
+        buffer[base+hd-kk-1] = buffer[base+hd+kk]
+    end
 end
 
 # Update right halo.
-function update_right!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
-    base = (hd+1:chunk.y-hd) .* chunk.x
-    kk = 1:hd
-    @. buffer[base+(chunk.x-hd+kk)] = buffer[base+(chunk.x-hd-1-kk)]
+function update_right!(chunk::Chunk, hd::Int, depth::Int, buffer::Vector{Float64})
+    for jj = hd:chunk.y-hd-1, kk = 1:depth
+        base = jj * chunk.x
+        buffer[base+(chunk.x-hd+kk)] = buffer[base+(chunk.x-hd-1-kk)]
+    end
 end
 
 # Update top halo.
-function update_top!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
-    jj = 1:hd
-    base = hd+1:chunk.x-hd
-    @. buffer[base+(chunk.y-hd+jj)*chunk.x] = buffer[base+(chunk.y-hd-1-jj)*chunk.x]
+function update_top!(chunk::Chunk, hd::Int, depth::Int, buffer::Vector{Float64})
+    for jj = 1:depth, kk = hd+1:chunk.x-hd
+        buffer[kk+(chunk.y-hd+jj)*chunk.x] = buffer[kk+(chunk.y-hd-1-jj)*chunk.x]
+    end
 end
 
 # Updates bottom halo.
-function update_bottom!(chunk::Chunk, hd::Int, buffer::Vector{Float64})
-    jj = 1:hd
-    base = hd+1:chunk.x-hd
-    buffer[@. base + (hd - jj - 1) * chunk.x] .= buffer[@. base + (hd + jj) * chunk.x]
+function update_bottom!(chunk::Chunk, hd::Int, depth::Int, buffer::Vector{Float64})
+    for jj = 1:depth, kk = hd+1:chunk.x-hd
+        @debug "" kk+(hd-jj)*chunk.x kk+(hd+jj)*chunk.x chunk.x depth
+        buffer[kk+(hd-jj)*chunk.x] = buffer[kk+(hd+jj)*chunk.x]
+    end
 end
 
 # Either packs or unpacks data from/to buffers.
@@ -193,20 +196,18 @@ function unpack_bottom(
 end
 
 # Store original energy state
-function store_energy(chunk::Chunk)
-    for ii = 1:chunk.x*chunk.y
-        chunk.energy[ii] = chunk.energy0[ii]
-    end
+function store_energy!(chunk::Chunk)
+    chunk.energy .= chunk.energy0
 end
 
 # Copies the current u into u0
-function copy_u(chunk::Chunk, hd::Int)
+function copy_u!(chunk::Chunk, hd::Int)
     index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
     chunk.u0[index] .= chunk.u[index]
 end
 
 # Calculates the current value of r
-function calculate_residual(chunk::Chunk, hd::Int)
+function calculate_residual!(chunk::Chunk, hd::Int)
     for kk in (hd:chunk.y-hd-1), jj in (hd+1:chunk.x-hd)
         index = jj + kk * chunk.x
         smvp = SMVP(chunk, chunk.u, index)
@@ -221,7 +222,7 @@ function calculate_2norm(chunk::Chunk, hd::Int, buffer::Vector{Float64})
 end
 
 # Finalises the solution
-function finalise(chunk::Chunk, hd::Int)
+function finalise!(chunk::Chunk, hd::Int)
     index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
     @. chunk.energy[index] = chunk.u[index] / chunk.density[index]
 end
