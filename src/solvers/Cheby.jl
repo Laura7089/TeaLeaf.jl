@@ -15,8 +15,8 @@ end
 function init(chunk::Chunk, hd::Int)
     for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
         index = kk + jj * chunk.x
-        smvp = SMVP(chunk.u)
-        chunk.w[index] = smvp
+        p = smvp(chunk.u)
+        chunk.w[index] = p
         chunk.r[index] = chunk.u0[index] - chunk.w[index]
         chunk.p[index] = chunk.r[index] / chunk.theta
     end
@@ -28,8 +28,8 @@ end
 function iterate(chunk::Chunk, alpha::Float64, beta::Float64)
     for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
         index = kk + jj * chunk.x
-        smvp = SMVP(chunk.u)
-        chunk.w[index] = smvp
+        p = smvp(chunk.u)
+        chunk.w[index] = p
         chunk.r[index] = chunk.u0[index] - chunk.w[index]
         chunk.p[index] = alpha * chunk.p[index] + beta * chunk.r[index]
     end

@@ -1,71 +1,42 @@
 export Chunk
 
-# Empty extension point
-@with_kw mutable struct ChunkExtension
-    d_comm_buffer::Vector{Float64}
-    d_reduce_buffer::Vector{Float64}
-    d_reduce_buffer2::Vector{Float64}
-    d_reduce_buffer3::Vector{Float64}
-    d_reduce_buffer4::Vector{Float64}
-end
-
-@with_kw mutable struct Chunk
-    @deftype Vector{Float64}
+@with_kw mutable struct Chunk{T<:AbstractMatrix{Float64}}
     # Solve-wide variables
     dt_init::Float64
-
-    # Neighbouring ranks
-    neighbours::Vector{Int} = Array{Int}(undef, NUM_FACES)
-
-    # MPI comm buffers
-    left_send::Any
-    left_recv::Any
-    right_send::Any
-    right_recv::Any
-    top_send::Any
-    top_recv::Any
-    bottom_send::Any
-    bottom_recv::Any
 
     # Field dimensions
     x::Int
     y::Int
 
-    # Mesh chunks
-    left::Int
-    right::Int = left + x
-    bottom::Int
-    top::Int = bottom + y
-
     # Field buffers
-    density0 = Array{Float64}(undef, x * y)
-    density = Array{Float64}(undef, x * y)
-    energy0 = Array{Float64}(undef, x * y)
-    energy = Array{Float64}(undef, x * y)
+    density0::T = Array{Float64}(undef, x, y)
+    density::T = Array{Float64}(undef, x, y)
+    energy0::T = Array{Float64}(undef, x, y)
+    energy::T = Array{Float64}(undef, x, y)
 
-    u = Array{Float64}(undef, x * y)
-    u0 = Array{Float64}(undef, x * y)
-    p = Array{Float64}(undef, x * y)
-    r = Array{Float64}(undef, x * y)
-    mi = Array{Float64}(undef, x * y)
-    w = Array{Float64}(undef, x * y)
-    kx = Array{Float64}(undef, x * y)
-    ky = Array{Float64}(undef, x * y)
-    sd = Array{Float64}(undef, x * y)
+    u::T = Array{Float64}(undef, x, y)
+    u0::T = Array{Float64}(undef, x, y)
+    p::T = Array{Float64}(undef, x, y)
+    r::T = Array{Float64}(undef, x, y)
+    mi::T = Array{Float64}(undef, x, y)
+    w::T = Array{Float64}(undef, x, y)
+    kx::T = Array{Float64}(undef, x, y)
+    ky::T = Array{Float64}(undef, x, y)
+    sd::T = Array{Float64}(undef, x, y)
 
-    cell_x = Array{Float64}(undef, x)
-    cell_y = Array{Float64}(undef, y)
-    cell_dx = Array{Float64}(undef, x)
-    cell_dy = Array{Float64}(undef, y)
+    cell_x::AbstractVector{Float64} = Array{Float64}(undef, x)
+    cell_y::AbstractVector{Float64} = Array{Float64}(undef, y)
+    cell_dx::AbstractVector{Float64} = Array{Float64}(undef, x)
+    cell_dy::AbstractVector{Float64} = Array{Float64}(undef, y)
 
-    vertex_dx = Array{Float64}(undef, x + 1)
-    vertex_dy = Array{Float64}(undef, y + 1)
-    vertex_x = Array{Float64}(undef, x + 1)
-    vertex_y = Array{Float64}(undef, y + 1)
+    vertex_dx::AbstractVector{Float64} = Array{Float64}(undef, x + 1)
+    vertex_dy::AbstractVector{Float64} = Array{Float64}(undef, y + 1)
+    vertex_x::AbstractVector{Float64} = Array{Float64}(undef, x + 1)
+    vertex_y::AbstractVector{Float64} = Array{Float64}(undef, y + 1)
 
-    volume = Array{Float64}(undef, x * y)
-    x_area = Array{Float64}(undef, (x + 1) * y)
-    y_area = Array{Float64}(undef, x * (y + 1))
+    volume::T = Array{Float64}(undef, x, y)
+    x_area::T = Array{Float64}(undef, x + 1, y)
+    y_area::T = Array{Float64}(undef, x, y + 1)
 
     # Cheby and PPCG
     # TODO: are these read outside of these solvers?
@@ -73,19 +44,17 @@ end
     eigmin::Float64 = 0.0
     eigmax::Float64 = 0.0
 
-    cg_alphas::Any
-    cg_betas::Any
-    cheby_alphas::Any
-    cheby_betas::Any
-
-    ext::ChunkExtension
+    cg_alphas::Vector{Float64}
+    cg_betas::Vector{Float64}
+    cheby_alphas::Vector{Float64}
+    cheby_betas::Vector{Float64}
 end
 
 # Initialise the chunk
-function Chunk(settings::Settings, x::Int, y::Int, left, bottom)::Chunk
-    @info "Performing this solve with solver" settings.solver_name
-    chunkx = x + settings.halo_depth * 2
-    chunky = y + settings.halo_depth * 2
+function Chunk(settings::Settings)
+    @info "Performing this solve with solver" settings.solver_name settings.solver
+    chunkx = settings.grid_x_cells + settings.halo_depth * 2
+    chunky = settings.grid_y_cells + settings.halo_depth * 2
 
     lr_len = chunky * settings.halo_depth * NUM_FIELDS
     tb_len = chunkx * settings.halo_depth * NUM_FIELDS
@@ -99,44 +68,17 @@ function Chunk(settings::Settings, x::Int, y::Int, left, bottom)::Chunk
         y = chunky,
         dt_init = settings.dt_init,
 
-        # Allocate the MPI comm buffers
-        left_send = Array{Float64}(undef, lr_len),
-        left_recv = Array{Float64}(undef, lr_len),
-        right_send = Array{Float64}(undef, lr_len),
-        right_recv = Array{Float64}(undef, lr_len),
-        top_send = Array{Float64}(undef, tb_len),
-        top_recv = Array{Float64}(undef, tb_len),
-        bottom_send = Array{Float64}(undef, tb_len),
-        bottom_recv = Array{Float64}(undef, tb_len),
-
-        # Neighbours
-        left = left,
-        bottom = bottom,
-
         # Solver-specific
         cg_alphas = Array{Float64}(undef, settings.max_iters),
         cg_betas = Array{Float64}(undef, settings.max_iters),
         cheby_alphas = Array{Float64}(undef, settings.max_iters),
         cheby_betas = Array{Float64}(undef, settings.max_iters),
-
-        # Initialise the ChunkExtension, which allows composition of extended
-        # fields specific to individual implementations
-        ext = ChunkExtension(
-            d_comm_buffer = Array{Float64}(
-                undef,
-                settings.halo_depth * max(x_inner, y_inner),
-            ),
-            d_reduce_buffer = Array{Float64}(undef, chunkx * chunky),
-            d_reduce_buffer2 = Array{Float64}(undef, chunkx * chunky),
-            d_reduce_buffer3 = Array{Float64}(undef, chunkx * chunky),
-            d_reduce_buffer4 = Array{Float64}(undef, chunkx * chunky),
-        ),
     )
 end
 
 function set_chunk_data!(settings::Settings, chunk::Chunk)
-    x_min = settings.grid_x_min + settings.dx * chunk.left
-    y_min = settings.grid_y_min + settings.dy * chunk.bottom
+    x_min = settings.grid_x_min + settings.dx
+    y_min = settings.grid_y_min + settings.dy
 
     xᵢ = 2:chunk.x+1
     @. chunk.vertex_x[xᵢ] = x_min + settings.dx * (xᵢ - settings.halo_depth)
@@ -148,10 +90,9 @@ function set_chunk_data!(settings::Settings, chunk::Chunk)
     yᵢ = 2:chunk.y
     @. chunk.cell_y[yᵢ] = 0.5 * (chunk.vertex_y[yᵢ] + chunk.vertex_y[3:chunk.y+1])
 
-    A = 2:chunk.x*chunk.y
-    chunk.volume[A] .= settings.dx * settings.dy
-    chunk.x_area[A] .= settings.dy
-    chunk.y_area[A] .= settings.dx
+    chunk.volume .= settings.dx * settings.dy
+    chunk.x_area .= settings.dy
+    chunk.y_area .= settings.dx
 end
 
 function set_chunk_state!(chunk::Chunk, states::Vector{State})
@@ -162,17 +103,16 @@ function set_chunk_state!(chunk::Chunk, states::Vector{State})
     # Apply all of the states in turn
     for ss in eachindex(states), jj = 1:chunk.y, kk = 1:chunk.x
         apply_state = @match states[ss].geometry begin
-            Rectangular =>
-                chunk.vertex_x[kk+1] >= states[ss].x_min &&
-                    chunk.vertex_x[kk] < states[ss].x_max &&
-                    chunk.vertex_y[jj+1] >= states[ss].y_min &&
-                    chunk.vertex_y[jj] < states[ss].y_max
+            Rectangular => all((
+                chunk.vertex_x[kk+1] >= states[ss].x_min,
+                chunk.vertex_x[kk] < states[ss].x_max,
+                chunk.vertex_y[jj+1] >= states[ss].y_min,
+                chunk.vertex_y[jj] < states[ss].y_max,
+            ))
             Circular => begin
                 radius = sqrt(
-                    (chunk.cell_x[kk] - states[ss].x_min) *
-                    (chunk.cell_x[kk] - states[ss].x_min) +
-                    (chunk.cell_y[jj] - states[ss].y_min) *
-                    (chunk.cell_y[jj] - states[ss].y_min),
+                    (chunk.cell_x[kk] - states[ss].x_min)^2 +
+                    (chunk.cell_y[jj] - states[ss].y_min)^2,
                 )
                 radius <= states[ss].radius
             end
@@ -183,13 +123,13 @@ function set_chunk_state!(chunk::Chunk, states::Vector{State})
 
         # Check if state applies at this vertex, and apply
         if apply_state
-            index = kk + jj * chunk.x
-            chunk.energy0[index] = states[ss].energy
-            chunk.density[index] = states[ss].density
+            chunk.energy0[jj, kk] = states[ss].energy
+            chunk.density[jj, kk] = states[ss].density
         end
     end
 
     # Set an initial state for u
-    index = @. (1:chunk.x-1) + (1:chunk.y-1) * chunk.x
-    @. chunk.u[index] = chunk.energy0[index] * chunk.density[index]
+    # TODO: correct indexing?
+    @. chunk.u[1:chunk.x-1, 1:chunk.y-1] =
+        chunk.energy0[1:chunk.x-1, 1:chunk.y-1] * chunk.density[1:chunk.x-1, 1:chunk.y-1]
 end

@@ -13,8 +13,8 @@ end
 function inner_iteration(chunk::Chunk, hd::Int, alpha::Float64, beta::Float64)
     index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
 
-    smvp = SMVP(chunk.sd)
-    chunk.r[index] .-= smvp
+    p = smvp(chunk.sd)
+    chunk.r[index] .-= p
     chunk.u[index] .+= chunk.sd[index]
 
     @. chunk.sd[index] = alpha * chunk.sd[index] + beta * chunk.r[index]

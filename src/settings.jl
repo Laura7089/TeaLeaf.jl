@@ -19,7 +19,6 @@ end
 # The main settings structure
 @with_kw mutable struct Settings
     # Solve-wide constants
-    rank::Int = 1 # TODO: does MPI.jl use 1-based?
     end_step::Int = typemax(Int)
     presteps::Int = 30
     max_iters::Int = 10_000
@@ -28,10 +27,6 @@ end
     summary_frequency::Int = 10
     halo_depth::Int = 1
     num_states::Int = 0
-    # TODO: remove MPI-related stuff
-    num_chunks::Int = 1
-    num_chunks_per_rank::Int = 1
-    num_ranks::Int = 1
     fields_to_exchange::Vector{Bool} = fill(false, 6)
 
     is_offload::Bool = false

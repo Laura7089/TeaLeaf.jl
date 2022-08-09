@@ -1,27 +1,27 @@
 module CG
 
-import ..Chunk
-import ..Settings
-import ..CONDUCTIVITY
-import ..SMVP
+import TeaLeaf.Chunk
+import TeaLeaf.Settings
+import TeaLeaf.CONDUCTIVITY
+import TeaLeaf.smvp
 
 # Performs a full solve with the CG solver kernels
-function driver(
-    chunks::Vector{Chunk},
+function driver!(
+    chunk::C,
     settings::Settings,
     rx::Float64,
     ry::Float64,
-)::Float64 # TODO: modifies `error`
+)::Float64 where {C<:Chunk} # TODO: modifies `error`
     # Perform CG initialisation
-    rro = init_driver!(chunks, settings, rx, ry) # Done
+    rro = init_driver!(chunk, settings, rx, ry) # Done
 
     error = ERROR_START
 
     # Iterate till convergence
     for tt = 1:settings.max_iters
-        rro, error = main_step(chunks, settings, tt, rro) # Done
+        rro, error = main_step(chunk, settings, tt, rro) # Done
 
-        halo_update!(chunks, settings, 1) # Done
+        halo_update!(chunk, settings, 1) # Done
 
         if sqrt(abs(error)) < settings.eps
             break
@@ -33,59 +33,65 @@ function driver(
 end
 
 # Invokes the CG initialisation kernels
-function init_driver!(chunks::Vector{Chunk}, set::Settings, rx::Float64, ry::Float64)
-    rro = init!.(chunks, set.halo_depth, set.coefficient, rx, ry) |> sum
+function init_driver!(
+    chunk::C,
+    set::Settings,
+    rx::Float64,
+    ry::Float64,
+) where {C<:Chunk}
+    rro = init!(chunk, set.halo_depth, set.coefficient, rx, ry)
 
     # Need to update for the matvec
     reset_fields_to_exchange(settings) # Done
     set.fields_to_exchange[FIELD_U] = true
     set.fields_to_exchange[FIELD_P] = true
-    halo_update!(chunks, settings, 1) # Done
+    halo_update!(chunk, settings, 1) # Done
 
-    copy_u.(chunks, set.halo_depth) # Done
+    copy_u(chunk, set.halo_depth) # Done
 
     return rro
 end
 
 # Invokes the main CG solve kernels
 function main_step(
-    chunks::Vector{Chunk},
+    chunk::C,
     settings::Settings,
     tt::Int,
     rro::Float64,
-)::Tuple{Float64,Float64}
-    pw = calc_w(chunks, settings.halo_depth) |> sum
+)::Tuple{Float64,Float64} where {C<:Chunk}
+    pw = calc_w(chunk, settings.halo_depth) |> sum
 
     α = rro / pw
-    rrn = 0.0
 
-    for cc = 2:settings.num_chunks_per_rank
-        # TODO: Some redundancy across chunks??
-        chunks[cc].cg_alphas[tt] = alpha
+    # TODO: Some redundancy across chunks??
+    chunk.cg_alphas[tt] = α
 
-        rrn += calc_ur(chunks[cc], settings.halo_depth, α) # Done
-    end
+    rrn = calc_ur(chunk, settings.halo_depth, α) # Done
 
     β = rrn / rro
 
-    for cc = 2:settings.num_chunks_per_rank
-        # TODO: Some redundancy across chunks??
-        chunks[cc].cg_betas[tt] = β
+    # TODO: Some redundancy across chunks??
+    chunk.cg_betas[tt] = β
 
-        calc_p(chunks[cc], settings.halo_depth, β) # Done
-    end
+    calc_p(chunk, settings.halo_depth, β) # Done
 
     return (rrn, rrn)
 end
 
 # Initialises the CG solver
-function init!(chunk::Chunk, hd::Int, coefficient::Int, rx::Float64, ry::Float64)
+function init!(
+    chunk::C,
+    hd::Int,
+    coefficient::Int,
+    rx::Float64,
+    ry::Float64,
+) where {C<:Chunk}
     if coefficient != CONDUCTIVITY && coefficient != RECIP_CONDUCTIVITY
         throw("Coefficient $(coefficient) is not valid.")
     end
 
     for jj = 1:chunk.y, kk = 1:chunk.x
-        index = kk + (jj-1) * chunk.x
+        index = kk + (jj - 1) * chunk.x
         chunk.u[index] = chunk.energy[index] * chunk.density[index]
     end
     chunk.p .= 0.0
@@ -112,8 +118,8 @@ function init!(chunk::Chunk, hd::Int, coefficient::Int, rx::Float64, ry::Float64
 
     for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
         index = kk + jj * chunk.x
-        smvp = SMVP(chunk.u)
-        chunk.w[index] = smvp
+        p = smvp(chunk, chunk.u, index)
+        chunk.w[index] = p
         chunk.r[index] = chunk.u[index] - chunk.w[index]
         chunk.p[index] = chunk.r[index]
         rro_temp += chunk.r[index] * chunk.p[index]
@@ -123,13 +129,13 @@ function init!(chunk::Chunk, hd::Int, coefficient::Int, rx::Float64, ry::Float64
 end
 
 # Calculates w
-function calc_w(chunk::Chunk, hd::Int)
+function calc_w(chunk::C, hd::Int) where {C<:Chunk}
     pw_temp = 0.0
-    smvp = SMVP(chunk.p)
 
     for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
         index = kk + jj * chunk.x
-        chunk.w[index] = smvp
+        p = smvp(chunk, chunk.p, index)
+        chunk.w[index] = p
         pw_temp += chunk.w[index] * chunk.p[index]
     end
 
@@ -137,7 +143,7 @@ function calc_w(chunk::Chunk, hd::Int)
 end
 
 # Calculates u and r
-function calc_ur(chunk::Chunk, hd::Int, alpha::Float64)
+function calc_ur(chunk::C, hd::Int, alpha::Float64) where {C<:Chunk}
     rrn_temp = 0.0
 
     for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
@@ -152,7 +158,7 @@ function calc_ur(chunk::Chunk, hd::Int, alpha::Float64)
 end
 
 # Calculates p
-function calc_p(chunk::Chunk, hd::Int, beta::Float64)
+function calc_p(chunk::C, hd::Int, beta::Float64) where {C<:Chunk}
     for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
         index = kk + jj * chunk.x
 
