@@ -7,18 +7,18 @@ using ExportAll
 const ERROR_START = 1e+10
 const ERROR_SWITCH_MAX = 1.0
 
-function field_summary(chunk::C, set::Settings, is_solve_finished::Bool) where {C<:Chunk}
+function fieldsummary(chunk::C, set::Settings, is_solvefinished::Bool) where {C<:Chunk}
     temp = 0.0
 
-    for jj = set.halo_depth+1:chunk.y-set.halo_depth,
-        kk = set.halo_depth+1:chunk.x-set.halo_depth
+    for jj = set.halodepth+1:chunk.y-set.halodepth,
+        kk = set.halodepth+1:chunk.x-set.halodepth
 
         cellVol = chunk.volume[kk, jj]
         cellMass = cellVol * chunk.density[kk, jj]
         temp += cellMass * chunk.u[kk, jj]
     end
 
-    if set.check_result && is_solve_finished
+    if set.checkresult && is_solvefinished
         @info "Checking results..."
         checking_value = get_checking_value(set)
         @info "Expected and actual:" checking_value temp
@@ -33,32 +33,32 @@ function field_summary(chunk::C, set::Settings, is_solve_finished::Bool) where {
 end
 
 # Invoke the halo update kernels
-function halo_update!(chunk::C, settings::Settings, depth::Int) where {C<:Chunk}
+function haloupdate!(chunk::C, settings::Settings, depth::Int) where {C<:Chunk}
     # Check that we actually have exchanges to perform
-    if !any(values(settings.fields_to_exchange))
+    if !any(values(settings.toexchange))
         return
     end
 
     for buffer in CHUNK_FIELDS
-        if settings.fields_to_exchange[buffer]
-            update_face!(chunk, settings.halo_depth, depth, getfield(chunk, buffer))
+        if settings.toexchange[buffer]
+            updateface!(chunk, settings.halodepth, depth, getfield(chunk, buffer))
         end
     end
 end
 
 # Calls all kernels that wrap up a solve regardless of solver
-function solve_finished!(chunk::C, settings::Settings) where {C<:Chunk}
+function solvefinished!(chunk::C, settings::Settings) where {C<:Chunk}
     exact_error = 0.0
 
-    if settings.check_result
-        calculate_residual!(chunk, settings.halo_depth)
+    if settings.checkresult
+        residual!(chunk, settings.halodepth)
 
-        exact_error += calculate_2norm(chunk, settings.halo_depth, chunk.r)
+        exact_error += twonorm(chunk, settings.halodepth, chunk.r)
     end
 
-    finalise!(chunk, settings.halo_depth)
-    settings.fields_to_exchange[:energy1] = true
-    halo_update!(chunk, settings, 1)
+    finalise!(chunk, settings.halodepth)
+    settings.toexchange[:energy1] = true
+    haloupdate!(chunk, settings, 1)
 end
 
 # Sparse Matrix Vector Product
@@ -74,75 +74,33 @@ function smvp(
 end
 
 # Updates faces in turn.
-function update_face!(
+function updateface!(
     chunk::C,
     hd::Int,
     depth::Int,
     buffer::B,
 ) where {C<:Chunk,B<:AbstractMatrix{Float64}}
-    for (face, updatekernel) in [
-        (CHUNK_LEFT, update_left!),
-        (CHUNK_RIGHT, update_right!),
-        (CHUNK_TOP, update_top!),
-        (CHUNK_BOTTOM, update_bottom!),
-    ]
-        # TODO: is this necessary without MPI?
-        updatekernel(chunk, hd, depth, buffer)
-    end
-end
-
-# Update left halo.
-function update_left!(
-    chunk::C,
-    hd::Int,
-    depth::Int,
-    buffer::B,
-) where {C<:Chunk,B<:AbstractMatrix{Float64}}
+    # Update left halo.
     for jj = hd+1:chunk.y-hd, kk = 1:depth
         # TODO: is the +1 right?
         buffer[hd-kk+1, jj] = buffer[hd+kk, jj]
     end
-end
-
-# Update right halo.
-function update_right!(
-    chunk::C,
-    hd::Int,
-    depth::Int,
-    buffer::B,
-) where {C<:Chunk,B<:AbstractMatrix{Float64}}
+    # Update right halo.
     for jj = hd:chunk.y-hd-1, kk = 1:depth
         buffer[chunk.x-hd+kk, jj] = buffer[chunk.x-hd-1-kk, jj]
     end
-end
-
-# Update top halo.
-function update_top!(
-    chunk::C,
-    hd::Int,
-    depth::Int,
-    buffer::B,
-) where {C<:Chunk,B<:AbstractMatrix{Float64}}
+    # Update top halo.
     for jj = 1:depth, kk = hd+1:chunk.x-hd
         buffer[kk, chunk.y-hd+jj] = buffer[kk, chunk.y-hd-1-jj]
     end
-end
-
-# Updates bottom halo.
-function update_bottom!(
-    chunk::C,
-    hd::Int,
-    depth::Int,
-    buffer::B,
-) where {C<:Chunk,B<:AbstractMatrix{Float64}}
+    # Updates bottom halo.
     for jj = 1:depth, kk = hd+1:chunk.x-hd
         # TODO: is the +1 right?
         buffer[kk, hd-jj+1] = buffer[kk, hd+jj]
     end
 end
-
 # Either packs or unpacks data from/to buffers.
-function pack_or_unpack(
+function packunpack(
     chunk::C,
     depth::Int,
     hd::Int,
@@ -160,7 +118,7 @@ function pack_or_unpack(
         (CHUNK_TOP, false) => unpack_top
         (CHUNK_BOTTOM, true) => pack_bottom
         (CHUNK_BOTTOM, false) => unpack_bottom
-        _ => throw("Incorrect face provided: $(face).")
+        f => throw("Incorrect face provided: $(f).")
     end
     kernel(x, y, depth, hd, field, buffer)
 end
@@ -176,7 +134,7 @@ function pack_left(
 )
     for jj = hd+1:y-hd, kk = hd+1:hd+depth
         bufIndex = (kk - hd) + (jj - hd) * depth
-        buffer[bufIndex] = field[jj*x+kk]
+        buffer[bufIndex] = field[kk, jj]
     end
 end
 
@@ -191,7 +149,7 @@ function pack_right(
 )
     for jj = hd+1:y-hd, kk = x-hd-depth+1:x-hd
         bufIndex = (kk - (x - hd - depth)) + (jj - hd) * depth
-        buffer[bufIndex] = field[jj*x+kk]
+        buffer[bufIndex] = field[kk, jj]
     end
 end
 
@@ -208,7 +166,7 @@ function pack_top(
 
     for jj = y-hd-depth+1:y-hd, kk = hd+1:x-hd
         bufIndex = (kk - hd) + (jj - (y - hd - depth)) * x_inner
-        buffer[bufIndex] = field[jj*x+kk]
+        buffer[bufIndex] = field[kk, jj]
     end
 end
 
@@ -225,7 +183,7 @@ function pack_bottom(
 
     for jj = hd+1:hd+depth, kk = hd+1:x-hd
         bufIndex = (kk - hd) + (jj - hd) * x_inner
-        buffer[bufIndex] = field[jj*x+kk]
+        buffer[bufIndex] = field[kk, jj]
     end
 end
 
@@ -240,7 +198,7 @@ function unpack_left(
 )
     for jj = hd+1:y-hd, kk = hd-depth+1:hd
         bufIndex = (kk - (hd - depth)) + (jj - hd) * depth
-        field[jj*x+kk] = buffer[bufIndex]
+        field[kk, jj] = buffer[bufIndex]
     end
 end
 
@@ -255,7 +213,7 @@ function unpack_right(
 )
     for jj = hd+1:y-hd, kk = x-hd+1:x-hd+depth
         bufIndex = (kk - (x - hd)) + (jj - hd) * depth
-        field[jj*x+kk] = buffer[bufIndex]
+        field[kk, jj] = buffer[bufIndex]
     end
 end
 
@@ -272,7 +230,7 @@ function unpack_top(
 
     for jj = y-hd+1:y-hd+depth, kk = hd+1:x-hd
         bufIndex = (kk - hd) + (jj - (y - hd)) * x_inner
-        field[jj*x+kk] = buffer[bufIndex]
+        field[kk, jj] = buffer[bufIndex]
     end
 end
 
@@ -289,7 +247,7 @@ function unpack_bottom(
 
     for jj = hd-depth+1:hd, kk = hd+1:x-hd
         bufIndex = (kk - hd) + (jj - (hd - depth)) * x_inner
-        field[jj*x+kk] = buffer[bufIndex]
+        field[kk, jj] = buffer[bufIndex]
     end
 end
 
@@ -299,12 +257,12 @@ function store_energy!(chunk::Chunk)
 end
 
 # Copies the current u into u0
-function copy_u!(chunk::Chunk, hd::Int)
+function copyu!(chunk::Chunk, hd::Int)
     chunk.u0[hd+1:chunk.x-hd, hd+1:chunk.y-hd] .= chunk.u[hd+1:chunk.x-hd, hd+1:chunk.y-hd]
 end
 
 # Calculates the current value of r
-function calculate_residual!(chunk::Chunk, hd::Int)
+function residual!(chunk::Chunk, hd::Int)
     for kk in (hd+1:chunk.y-hd-1), jj in (hd+1:chunk.x-hd)
         p = smvp(chunk, chunk.u, kk, jj)
         chunk.r[kk, jj] = chunk.u0[kk, jj] - p
@@ -312,7 +270,7 @@ function calculate_residual!(chunk::Chunk, hd::Int)
 end
 
 # Calculates the 2 norm of a given buffer
-function calculate_2norm(chunk::Chunk, hd::Int, buffer::AbstractMatrix{Float64})
+function twonorm(chunk::Chunk, hd::Int, buffer::AbstractMatrix{Float64})
     return sum(buffer[hd+1:chunk.x-hd, hd+1:chunk.y-hd] .^ 2)
 end
 

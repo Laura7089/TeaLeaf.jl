@@ -6,24 +6,31 @@ using TeaLeaf.Kernels
 # Performs a full solve with the CG solver kernels
 function driver!(
     chunk::C,
-    settings::Settings,
+    set::Settings,
     rx::Float64,
     ry::Float64,
 )::Float64 where {C<:Chunk}
     # Perform CG initialisation
-    rro = init_driver!(chunk, settings, rx, ry)
+    rro = init!(chunk, set.halodepth, set.coefficient, rx, ry)
+
+    setindex!.(Ref(set.toexchange), false, CHUNK_FIELDS)
+    set.toexchange[:u] = true
+    set.toexchange[:p] = true
+    haloupdate!(chunk, set, 1)
+
+    copyu!(chunk, set.halodepth)
 
     error = ERROR_START
 
     iters = 0
     # Iterate till convergence
-    for tt = 1:settings.max_iters
+    for tt = 1:set.maxiters
         iters = tt
-        rro, error = main_step(chunk, settings, tt, rro)
+        rro, error = mainstep(chunk, set, tt, rro)
 
-        halo_update!(chunk, settings, 1)
+        haloupdate!(chunk, set, 1)
 
-        if sqrt(abs(error)) < settings.eps
+        if sqrt(abs(error)) < set.eps
             break
         end
     end
@@ -32,43 +39,22 @@ function driver!(
     return error
 end
 
-# Invokes the CG initialisation kernels
-function init_driver!(chunk::C, set::Settings, rx::Float64, ry::Float64) where {C<:Chunk}
-    rro = init!(chunk, set.halo_depth, set.coefficient, rx, ry)
-
-    # Need to update for the matvec
-    setindex!.(Ref(set.fields_to_exchange), false, CHUNK_FIELDS)
-    set.fields_to_exchange[:u] = true
-    set.fields_to_exchange[:p] = true
-    halo_update!(chunk, set, 1)
-
-    copy_u!(chunk, set.halo_depth)
-
-    return rro
-end
-
 # Invokes the main CG solve kernels
-function main_step(
+function mainstep(
     chunk::C,
     settings::Settings,
     tt::Int,
     rro::Float64,
 )::Tuple{Float64,Float64} where {C<:Chunk}
-    pw = calc_w(chunk, settings.halo_depth) |> sum
+    pw = w!(chunk, settings.halodepth)
 
     α = rro / pw
-
-    # TODO: Some redundancy across chunks??
-    chunk.cg_alphas[tt] = α
-
-    rrn = calc_ur(chunk, settings.halo_depth, α)
+    chunk.cgα[tt] = α
+    rrn = ur!(chunk, settings.halodepth, α)
 
     β = rrn / rro
-
-    # TODO: Some redundancy across chunks??
-    chunk.cg_betas[tt] = β
-
-    calc_p(chunk, settings.halo_depth, β)
+    chunk.cgβ[tt] = β
+    p!(chunk, settings.halodepth, β)
 
     return (rrn, rrn)
 end
@@ -120,7 +106,7 @@ function init!(
 end
 
 # Calculates w
-function calc_w(chunk::C, hd::Int) where {C<:Chunk}
+function w!(chunk::C, hd::Int) where {C<:Chunk}
     pw_temp = 0.0
 
     for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
@@ -133,7 +119,7 @@ function calc_w(chunk::C, hd::Int) where {C<:Chunk}
 end
 
 # Calculates u and r
-function calc_ur(chunk::C, hd::Int, alpha::Float64) where {C<:Chunk}
+function ur!(chunk::C, hd::Int, alpha::Float64) where {C<:Chunk}
     rrn_temp = 0.0
 
     for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
@@ -146,7 +132,7 @@ function calc_ur(chunk::C, hd::Int, alpha::Float64) where {C<:Chunk}
 end
 
 # Calculates p
-function calc_p(chunk::C, hd::Int, beta::Float64) where {C<:Chunk}
+function p!(chunk::C, hd::Int, beta::Float64) where {C<:Chunk}
     for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
         chunk.p[kk, jj] = beta * chunk.p[kk, jj] + chunk.r[kk, jj]
     end

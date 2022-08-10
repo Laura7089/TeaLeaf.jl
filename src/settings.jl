@@ -12,10 +12,10 @@ const RECIP_CONDUCTIVITY = 2
 @with_kw mutable struct State
     density::Float64 = 0.0
     energy::Float64 = 0.0
-    x_min::Float64 = 0.0
-    y_min::Float64 = 0.0
-    x_max::Float64 = 0.0
-    y_max::Float64 = 0.0
+    xmin::Float64 = 0.0
+    ymin::Float64 = 0.0
+    xmax::Float64 = 0.0
+    ymax::Float64 = 0.0
     radius::Float64 = 0.0
     geometry::Geometry = Rectangular
 end
@@ -23,43 +23,42 @@ end
 # The main settings structure
 @with_kw mutable struct Settings
     # Solve-wide constants
-    end_step::Int = typemax(Int)
+    endstep::Int = typemax(Int)
     presteps::Int = 30
-    max_iters::Int = 10_000
+    maxiters::Int = 10_000
     coefficient::Int = CONDUCTIVITY
     ppcg_inner_steps::Int = 10
-    summary_frequency::Int = 10
-    halo_depth::Int = 1
-    num_states::Int = 0
-    fields_to_exchange::Dict{Symbol,Bool} = Dict(zip(CHUNK_FIELDS, fill(false, 6)))
+    summaryfrequency::Int = 10
+    halodepth::Int = 1
+    # Fields to exchange
+    toexchange::Dict{Symbol,Bool} = Dict(zip(CHUNK_FIELDS, fill(false, 6)))
 
     is_offload::Bool = false
 
-    error_switch::Bool = false
-    check_result::Bool = true
+    errorswitch::Bool = false
+    checkresult::Bool = true
     preconditioner::Bool = false
 
     eps::Float64 = 1e-15
-    dt_init::Float64 = 0.1
-    end_time::Float64 = 10.0
-    eps_lim::Float64 = 1e-5
+    dtinit::Float64 = 0.1
+    endtime::Float64 = 10.0
+    epslim::Float64 = 1e-5
 
     # Input-Output files
-    tea_in_filename::String = "tea.in"
-    tea_out_filename::String = "tea.out"
-    test_problem_filename::String = "tea.problems"
+    infile::String = "tea.in"
+    outfile::String = "tea.out"
+    testproblemfile::String = "tea.problems"
 
     solver::Module = CG
-    solver_name::String = ""
 
     # Field dimensions
-    grid_x_cells::Int = 10
-    grid_y_cells::Int = 10
+    xcells::Int = 10
+    ycells::Int = 10
 
-    grid_x_min::Float64 = 0.0
-    grid_y_min::Float64 = 0.0
-    grid_x_max::Float64 = 100.0
-    grid_y_max::Float64 = 100.0
+    xmin::Float64 = 0.0
+    ymin::Float64 = 0.0
+    xmax::Float64 = 100.0
+    ymax::Float64 = 100.0
 
     dx::Float64 = 0.0
     dy::Float64 = 0.0
@@ -69,8 +68,8 @@ Broadcast.broadcastable(s::Settings) = Ref(s)
 function read_config!(settings::Settings)::Vector{State}
     states = []
     # Open the configuration file
-    @info "Reading configuration from $(settings.tea_in_filename)"
-    open(settings.tea_in_filename, read = true) do tea_in
+    @info "Reading configuration from $(settings.infile)"
+    open(settings.infile, read = true) do tea_in
         while !eof(tea_in)
             line = readline(tea_in)
             @debug "Config line:" line
@@ -87,21 +86,7 @@ function read_config!(settings::Settings)::Vector{State}
             # Read all of the settings from the config
             key, val = split(line, "=")
             @match key begin
-                "initial_timestep" => (settings.dt_init = parse(Float64, val))
-                "xmin" => (settings.grid_x_min = parse(Float64, val))
-                "ymin" => (settings.grid_y_min = parse(Float64, val))
-                "xmax" => (settings.grid_x_max = parse(Float64, val))
-                "ymax" => (settings.grid_y_max = parse(Float64, val))
-                "tl_max_iters" => (settings.max_iters = parse(Float64, val))
-                "tl_eps" => (settings.eps = parse(Float64, val))
-                # TODO: call flag parsing after this so we don't have to check
-                "x_cells",
-                if settings.grid_x_cells == 10
-                end => (settings.grid_x_cells = parse(Int, val))
-                "y_cells",
-                if settings.grid_y_cells == 10
-                end => (settings.grid_y_cells = parse(Int, val))
-                "epslim" => (settings.eps_lim = parse(Float64, val))
+                "initial_timestep" => (settings.dtinit = parse(Float64, val))
                 # Use other keys as direct field names
                 _ => try
                     key = Symbol(key)
@@ -117,10 +102,8 @@ function read_config!(settings::Settings)::Vector{State}
     @info "Solution Parameters" settings
 
     for (ss, state) in enumerate(states)
-        @debug "State $(ss)" state.density state.energy state.x_min state.y_min state.x_max state.y_max state.radius state.geometry
+        @debug "State $(ss)" state.density state.energy state.xmin state.ymin state.x_max state.ymax state.radius state.geometry
     end
-
-    settings.num_states = length(states)
     return states
 end
 
@@ -141,10 +124,10 @@ function read_state(line, settings::Settings)::State
         # State 1 is the default state so geometry irrelevant
         if state_num > 1
             @match key begin
-                "xmin" => (state.x_min = parse(Float64, val) + settings.dx / 100)
-                "ymin" => (state.y_min = parse(Float64, val) + settings.dy / 100)
-                "xmax" => (state.x_max = parse(Float64, val) - settings.dx / 100)
-                "ymax" => (state.y_max = parse(Float64, val) - settings.dy / 100)
+                "xmin" => (state.xmin = parse(Float64, val) + settings.dx / 100)
+                "ymin" => (state.ymin = parse(Float64, val) + settings.dy / 100)
+                "xmax" => (state.xmax = parse(Float64, val) - settings.dx / 100)
+                "ymax" => (state.ymax = parse(Float64, val) - settings.dy / 100)
                 "radius" => (state.radius = parse(Float64, val))
                 "geometry" => (state.geometry = @match val begin
                     "rectangle" => Rectangular
@@ -158,8 +141,7 @@ function read_state(line, settings::Settings)::State
     return state
 end
 
-function parse_flags()::Settings
-    settings = Settings()
+function parseflags!(settings::Settings)
     s = ArgParseSettings()
 
     @add_arg_table s begin
@@ -182,24 +164,23 @@ function parse_flags()::Settings
         end
     end
     if !isnothing(args["x"])
-        settings.grid_x_cells = args["x"]
+        settings.xcells = args["x"]
     end
     if !isnothing(args["y"])
-        settings.grid_y_cells = args["y"]
+        settings.ycells = args["y"]
     end
-    return settings
 end
 
 # Fetches the checking value from the test problems file
 function get_checking_value(settings::Settings)::Float64
-    open(settings.test_problem_filename, read = true) do file
+    open(settings.testproblemfile, read = true) do file
         # Get the number of states present in the config file
         while !eof(file)
             thesplit = split(readline(file), " ")
             params = parse.(Int64, thesplit[1:3])
             checking_value = parse(Float64, thesplit[4])
 
-            if params == [settings.grid_x_cells, settings.grid_y_cells, settings.end_step]
+            if params == [settings.xcells, settings.ycells, settings.endstep]
                 # Found the problem in the file
                 return checking_value
             end

@@ -15,7 +15,7 @@ end
 
 @with_kw mutable struct Chunk{T<:AbstractMatrix{Float64}}
     # Solve-wide variables
-    dt_init::Float64
+    dtinit::Float64
 
     # Field dimensions
     x::Int
@@ -37,75 +37,75 @@ end
     ky::T = Array{Float64}(undef, x, y)
     sd::T = Array{Float64}(undef, x, y)
 
-    cell_x::AbstractVector{Float64} = Array{Float64}(undef, x)
-    cell_y::AbstractVector{Float64} = Array{Float64}(undef, y)
-    cell_dx::AbstractVector{Float64} = Array{Float64}(undef, x)
-    cell_dy::AbstractVector{Float64} = Array{Float64}(undef, y)
+    cellx::AbstractVector{Float64} = Array{Float64}(undef, x)
+    celly::AbstractVector{Float64} = Array{Float64}(undef, y)
+    celldx::AbstractVector{Float64} = Array{Float64}(undef, x)
+    celldy::AbstractVector{Float64} = Array{Float64}(undef, y)
 
-    vertex_dx::AbstractVector{Float64} = Array{Float64}(undef, x + 1)
-    vertex_dy::AbstractVector{Float64} = Array{Float64}(undef, y + 1)
-    vertex_x::AbstractVector{Float64} = Array{Float64}(undef, x + 1)
-    vertex_y::AbstractVector{Float64} = Array{Float64}(undef, y + 1)
+    vertexdx::AbstractVector{Float64} = Array{Float64}(undef, x + 1)
+    vertexdy::AbstractVector{Float64} = Array{Float64}(undef, y + 1)
+    vertexx::AbstractVector{Float64} = Array{Float64}(undef, x + 1)
+    vertexy::AbstractVector{Float64} = Array{Float64}(undef, y + 1)
 
     volume::T = Array{Float64}(undef, x, y)
-    x_area::T = Array{Float64}(undef, x + 1, y)
-    y_area::T = Array{Float64}(undef, x, y + 1)
+    xarea::T = Array{Float64}(undef, x + 1, y)
+    yarea::T = Array{Float64}(undef, x, y + 1)
 
     # Cheby and PPCG
     # TODO: are these read outside of these solvers?
-    theta::Float64 = 0.0
+    θ::Float64 = 0.0
     eigmin::Float64 = 0.0
     eigmax::Float64 = 0.0
 
-    cg_alphas::Vector{Float64}
-    cg_betas::Vector{Float64}
-    cheby_alphas::Vector{Float64}
-    cheby_betas::Vector{Float64}
+    cgα::Vector{Float64}
+    cgβ::Vector{Float64}
+    chebyα::Vector{Float64}
+    chebyβ::Vector{Float64}
 end
 
 # Initialise the chunk
 function Chunk(settings::Settings)
-    @info "Performing this solve with solver" settings.solver_name settings.solver
-    chunkx = settings.grid_x_cells + settings.halo_depth * 2
-    chunky = settings.grid_y_cells + settings.halo_depth * 2
+    @info "Performing this solve with solver" settings.solver
+    chunkx = settings.xcells + settings.halodepth * 2
+    chunky = settings.ycells + settings.halodepth * 2
 
-    lr_len = chunky * settings.halo_depth * NUM_FIELDS
-    tb_len = chunkx * settings.halo_depth * NUM_FIELDS
+    lr_len = chunky * settings.halodepth * NUM_FIELDS
+    tb_len = chunkx * settings.halodepth * NUM_FIELDS
 
-    x_inner = chunkx - 2 * settings.halo_depth
-    y_inner = chunky - 2 * settings.halo_depth
+    x_inner = chunkx - 2 * settings.halodepth
+    y_inner = chunky - 2 * settings.halodepth
 
     return Chunk(
         # Initialise the key variables
         x = chunkx,
         y = chunky,
-        dt_init = settings.dt_init,
+        dtinit = settings.dtinit,
 
         # Solver-specific
-        cg_alphas = Array{Float64}(undef, settings.max_iters),
-        cg_betas = Array{Float64}(undef, settings.max_iters),
-        cheby_alphas = Array{Float64}(undef, settings.max_iters),
-        cheby_betas = Array{Float64}(undef, settings.max_iters),
+        cgα = Array{Float64}(undef, settings.maxiters),
+        cgβ = Array{Float64}(undef, settings.maxiters),
+        chebyα = Array{Float64}(undef, settings.maxiters),
+        chebyβ = Array{Float64}(undef, settings.maxiters),
     )
 end
 
 function set_chunk_data!(settings::Settings, chunk::Chunk)
-    x_min = settings.grid_x_min + settings.dx
-    y_min = settings.grid_y_min + settings.dy
+    xmin = settings.xmin + settings.dx
+    ymin = settings.ymin + settings.dy
 
     xᵢ = 2:chunk.x+1
-    @. chunk.vertex_x[xᵢ] = x_min + settings.dx * (xᵢ - settings.halo_depth)
+    @. chunk.vertexx[xᵢ] = xmin + settings.dx * (xᵢ - settings.halodepth)
     yᵢ = 2:chunk.y+1
-    @. chunk.vertex_y[yᵢ] = y_min + settings.dy * (yᵢ - settings.halo_depth)
+    @. chunk.vertexy[yᵢ] = ymin + settings.dy * (yᵢ - settings.halodepth)
 
     xᵢ = 2:chunk.x
-    @. chunk.cell_x[xᵢ] = 0.5 * (chunk.vertex_x[xᵢ] + chunk.vertex_x[3:chunk.x+1])
+    @. chunk.cellx[xᵢ] = 0.5 * (chunk.vertexx[xᵢ] + chunk.vertexx[3:chunk.x+1])
     yᵢ = 2:chunk.y
-    @. chunk.cell_y[yᵢ] = 0.5 * (chunk.vertex_y[yᵢ] + chunk.vertex_y[3:chunk.y+1])
+    @. chunk.celly[yᵢ] = 0.5 * (chunk.vertexy[yᵢ] + chunk.vertexy[3:chunk.y+1])
 
     chunk.volume .= settings.dx * settings.dy
-    chunk.x_area .= settings.dy
-    chunk.y_area .= settings.dx
+    chunk.xarea .= settings.dy
+    chunk.yarea .= settings.dx
 end
 
 function set_chunk_state!(chunk::Chunk, states::Vector{State})
@@ -117,21 +117,21 @@ function set_chunk_state!(chunk::Chunk, states::Vector{State})
     for ss in eachindex(states), jj = 1:chunk.y, kk = 1:chunk.x
         apply_state = @match states[ss].geometry begin
             Rectangular => all((
-                chunk.vertex_x[kk+1] >= states[ss].x_min,
-                chunk.vertex_x[kk] < states[ss].x_max,
-                chunk.vertex_y[jj+1] >= states[ss].y_min,
-                chunk.vertex_y[jj] < states[ss].y_max,
+                chunk.vertexx[kk+1] >= states[ss].xmin,
+                chunk.vertexx[kk] < states[ss].xmax,
+                chunk.vertexy[jj+1] >= states[ss].ymin,
+                chunk.vertexy[jj] < states[ss].ymax,
             ))
             Circular => begin
                 radius = sqrt(
-                    (chunk.cell_x[kk] - states[ss].x_min)^2 +
-                    (chunk.cell_y[jj] - states[ss].y_min)^2,
+                    (chunk.cellx[kk] - states[ss].xmin)^2 +
+                    (chunk.celly[jj] - states[ss].ymin)^2,
                 )
                 radius <= states[ss].radius
             end
             Point =>
-                chunk.vertex_x[kk] == states[ss].x_min &&
-                    chunk.vertex_y[jj] == states[ss].y_min
+                chunk.vertexx[kk] == states[ss].xmin &&
+                    chunk.vertexy[jj] == states[ss].ymin
         end
 
         # Check if state applies at this vertex, and apply

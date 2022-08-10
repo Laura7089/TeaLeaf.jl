@@ -31,21 +31,22 @@ function main()
 end
 
 function initialise_application()
-    settings = parse_flags()
+    settings = Settings()
     states = read_config!(settings)
+    parseflags!(settings)
 
     chunk = Chunk(settings)
     set_chunk_data!(settings, chunk)
     set_chunk_state!(chunk, states)
 
     # Prime the initial halo data
-    # settings.fields_to_exchange .= false
-    setindex!.(Ref(settings.fields_to_exchange), false, CHUNK_FIELDS)
-    settings.fields_to_exchange[:density] = true
-    settings.fields_to_exchange[:energy0] = true
-    settings.fields_to_exchange[:energy1] = true
+    # settings.toexchange .= false
+    setindex!.(Ref(settings.toexchange), false, CHUNK_FIELDS)
+    settings.toexchange[:density] = true
+    settings.toexchange[:energy0] = true
+    settings.toexchange[:energy1] = true
     # TODO: is depth=1 correct here?
-    halo_update!(chunk, settings, 1)
+    haloupdate!(chunk, settings, 1)
 
     store_energy!(chunk)
 
@@ -54,33 +55,33 @@ end
 
 # The main timestep loop
 function diffuse!(chunk::C, set::Settings) where {C<:Chunk}
-    for tt = 1:set.end_step
+    for tt = 1:set.endstep
         # Calculate minimum timestep information
-        dt = min(chunk.dt_init, set.dt_init)
+        dt = min(chunk.dtinit, set.dtinit)
 
         rx = dt / (set.dx * set.dx)
         ry = dt / (set.dy * set.dy)
 
         # Prepare halo regions for solve
-        setindex!.(Ref(set.fields_to_exchange), false, CHUNK_FIELDS)
-        set.fields_to_exchange[:energy1] = true
-        set.fields_to_exchange[:density] = true
+        setindex!.(Ref(set.toexchange), false, CHUNK_FIELDS)
+        set.toexchange[:energy1] = true
+        set.toexchange[:density] = true
         # TODO: is depth=1 correct here?
-        halo_update!(chunk, set, 1)
+        haloupdate!(chunk, set, 1)
 
         # Perform the solve with one of the integrated solvers
         error = set.solver.driver!(chunk, set, rx, ry)
 
         # Perform solve finalisation tasks
-        solve_finished!(chunk, set)
+        solvefinished!(chunk, set)
 
-        if tt % set.summary_frequency == 0
-            field_summary(chunk, set, false)
+        if tt % set.summaryfrequency == 0
+            fieldsummary(chunk, set, false)
         end
 
         @info "Timestep finished" tt error
     end
-    field_summary(chunk, set, true)
+    fieldsummary(chunk, set, true)
 end
 
 end
