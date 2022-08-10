@@ -1,14 +1,7 @@
 module CG
 
-import TeaLeaf.Chunk
-import TeaLeaf.Settings
-import TeaLeaf.CONDUCTIVITY
-import TeaLeaf.smvp
-import TeaLeaf.FIELD_U
-import TeaLeaf.FIELD_P
-import TeaLeaf.halo_update!
-import TeaLeaf.copy_u!
-import TeaLeaf.ERROR_START
+using TeaLeaf
+using TeaLeaf.Kernels
 
 # Performs a full solve with the CG solver kernels
 function driver!(
@@ -16,19 +9,19 @@ function driver!(
     settings::Settings,
     rx::Float64,
     ry::Float64,
-)::Float64 where {C<:Chunk} # TODO: modifies `error`
+)::Float64 where {C<:Chunk}
     # Perform CG initialisation
-    rro = init_driver!(chunk, settings, rx, ry) # Done
+    rro = init_driver!(chunk, settings, rx, ry)
 
     error = ERROR_START
 
     iters = 0
     # Iterate till convergence
     for tt = 1:settings.max_iters
-        iters += 1
-        rro, error = main_step(chunk, settings, tt, rro) # Done
+        iters = tt
+        rro, error = main_step(chunk, settings, tt, rro)
 
-        halo_update!(chunk, settings, 1) # Done
+        halo_update!(chunk, settings, 1)
 
         if sqrt(abs(error)) < settings.eps
             break
@@ -44,9 +37,9 @@ function init_driver!(chunk::C, set::Settings, rx::Float64, ry::Float64) where {
     rro = init!(chunk, set.halo_depth, set.coefficient, rx, ry)
 
     # Need to update for the matvec
-    set.fields_to_exchange .= false
-    set.fields_to_exchange[FIELD_U] = true
-    set.fields_to_exchange[FIELD_P] = true
+    setindex!.(Ref(set.fields_to_exchange), false, CHUNK_FIELDS)
+    set.fields_to_exchange[:u] = true
+    set.fields_to_exchange[:p] = true
     halo_update!(chunk, set, 1)
 
     copy_u!(chunk, set.halo_depth)
@@ -68,14 +61,14 @@ function main_step(
     # TODO: Some redundancy across chunks??
     chunk.cg_alphas[tt] = α
 
-    rrn = calc_ur(chunk, settings.halo_depth, α) # Done
+    rrn = calc_ur(chunk, settings.halo_depth, α)
 
     β = rrn / rro
 
     # TODO: Some redundancy across chunks??
     chunk.cg_betas[tt] = β
 
-    calc_p(chunk, settings.halo_depth, β) # Done
+    calc_p(chunk, settings.halo_depth, β)
 
     return (rrn, rrn)
 end

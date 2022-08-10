@@ -1,8 +1,12 @@
+export Settings
+export CONDUCTIVITY, RECIP_CONDUCTIVITY
+export get_checking_value
+
 # The accepted types of state geometry
 @enum Geometry Rectangular Circular Point
 
 const CONDUCTIVITY = 1
-const NUM_FIELDS = 6
+const RECIP_CONDUCTIVITY = 2
 
 # State list
 @with_kw mutable struct State
@@ -27,7 +31,7 @@ end
     summary_frequency::Int = 10
     halo_depth::Int = 1
     num_states::Int = 0
-    fields_to_exchange::Vector{Bool} = fill(false, 6)
+    fields_to_exchange::Dict{Symbol,Bool} = Dict(zip(CHUNK_FIELDS, fill(false, 6)))
 
     is_offload::Bool = false
 

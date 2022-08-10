@@ -1,4 +1,17 @@
 export Chunk
+export CHUNK_FIELDS
+export CHUNK_LEFT, CHUNK_RIGHT, CHUNK_TOP, CHUNK_BOTTOM
+
+@consts begin
+    CHUNK_LEFT = 1
+    CHUNK_RIGHT = 2
+    CHUNK_BOTTOM = 3
+    CHUNK_TOP = 4
+
+    CHUNK_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
+
+    NUM_FIELDS = 6
+end
 
 @with_kw mutable struct Chunk{T<:AbstractMatrix{Float64}}
     # Solve-wide variables

@@ -1,29 +1,26 @@
 module Kernels
 
-function field_summary(
-    chunk::C,
-    settings::Settings,
-    is_solve_finished::Bool,
-) where {C<:Chunk}
-    vol = 0.0
-    ie = 0.0
-    temp = 0.0
-    mass = 0.0
+using TeaLeaf
+using Match
+using ExportAll
 
-    for jj = settings.halo_depth+1:chunk.y-settings.halo_depth,
-        kk = settings.halo_depth+1:chunk.x-settings.halo_depth
+const ERROR_START = 1e+10
+const ERROR_SWITCH_MAX = 1.0
+
+function field_summary(chunk::C, set::Settings, is_solve_finished::Bool) where {C<:Chunk}
+    temp = 0.0
+
+    for jj = set.halo_depth+1:chunk.y-set.halo_depth,
+        kk = set.halo_depth+1:chunk.x-set.halo_depth
 
         cellVol = chunk.volume[kk, jj]
         cellMass = cellVol * chunk.density[kk, jj]
-        vol += cellVol
-        mass += cellMass
-        ie += cellMass * chunk.energy0[kk, jj]
         temp += cellMass * chunk.u[kk, jj]
     end
 
-    if settings.check_result && is_solve_finished
+    if set.check_result && is_solve_finished
         @info "Checking results..."
-        checking_value = get_checking_value(settings) # Done
+        checking_value = get_checking_value(set)
         @info "Expected and actual:" checking_value temp
 
         qa_diff = abs(100.0 * (temp / checking_value) - 100.0)
@@ -38,20 +35,12 @@ end
 # Invoke the halo update kernels
 function halo_update!(chunk::C, settings::Settings, depth::Int) where {C<:Chunk}
     # Check that we actually have exchanges to perform
-    if !any(settings.fields_to_exchange)
+    if !any(values(settings.fields_to_exchange))
         return
     end
 
-    for (index, buffer) in [
-        (FIELD_DENSITY, :density),
-        (FIELD_P, :p),
-        (FIELD_ENERGY0, :energy0),
-        (FIELD_ENERGY1, :energy),
-        (FIELD_U, :u),
-        (FIELD_SD, :sd),
-    ]
-
-        if settings.fields_to_exchange[index]
+    for buffer in CHUNK_FIELDS
+        if settings.fields_to_exchange[buffer]
             update_face!(chunk, settings.halo_depth, depth, getfield(chunk, buffer))
         end
     end
@@ -68,12 +57,17 @@ function solve_finished!(chunk::C, settings::Settings) where {C<:Chunk}
     end
 
     finalise!(chunk, settings.halo_depth)
-    settings.fields_to_exchange[FIELD_ENERGY1] = true
+    settings.fields_to_exchange[:energy1] = true
     halo_update!(chunk, settings, 1)
 end
 
 # Sparse Matrix Vector Product
-function smvp(chunk::C, a::Matrix{Float64}, x::Int, y::Int)::Float64 where {C<:Chunk}
+function smvp(
+    chunk::C,
+    a::AbstractMatrix{Float64},
+    x::Int,
+    y::Int,
+)::Float64 where {C<:Chunk}
     (1 + chunk.kx[x+1, y] + chunk.kx[x, y] + chunk.ky[x, y+1] + chunk.ky[x, y]) * a[x, y]
     -(chunk.kx[x+1, y] * a[x+1, y] + chunk.kx[x, y] * a[x-1, y])
     -(chunk.ky[x, y+1] * a[x, y+1] + chunk.ky[x, y] * a[x, y-1])
@@ -306,8 +300,7 @@ end
 
 # Copies the current u into u0
 function copy_u!(chunk::Chunk, hd::Int)
-    index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
-    chunk.u0[index] .= chunk.u[index]
+    chunk.u0[hd+1:chunk.x-hd, hd+1:chunk.y-hd] .= chunk.u[hd+1:chunk.x-hd, hd+1:chunk.y-hd]
 end
 
 # Calculates the current value of r
@@ -325,8 +318,11 @@ end
 
 # Finalises the solution
 function finalise!(chunk::Chunk, hd::Int)
-    index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
-    @. chunk.energy[index] = chunk.u[index] / chunk.density[index]
+    @. chunk.energy[hd+1:chunk.x-hd, hd+1:chunk.y-hd] =
+        chunk.u[hd+1:chunk.x-hd, hd+1:chunk.y-hd] /
+        chunk.density[hd+1:chunk.x-hd, hd+1:chunk.y-hd]
 end
+
+@exportAll()
 
 end
