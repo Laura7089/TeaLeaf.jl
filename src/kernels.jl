@@ -1,4 +1,10 @@
-function field_summary(chunk::C, settings::Settings, is_solve_finished::Bool) where C<:Chunk
+module Kernels
+
+function field_summary(
+    chunk::C,
+    settings::Settings,
+    is_solve_finished::Bool,
+) where {C<:Chunk}
     vol = 0.0
     ie = 0.0
     temp = 0.0
@@ -7,13 +13,12 @@ function field_summary(chunk::C, settings::Settings, is_solve_finished::Bool) wh
     for jj = settings.halo_depth+1:chunk.y-settings.halo_depth,
         kk = settings.halo_depth+1:chunk.x-settings.halo_depth
 
-        index = kk + jj * chunk.x
-        cellVol = chunk.volume[index]
-        cellMass = cellVol * chunk.density[index]
+        cellVol = chunk.volume[kk, jj]
+        cellMass = cellVol * chunk.density[kk, jj]
         vol += cellVol
         mass += cellMass
-        ie += cellMass * chunk.energy0[index]
-        temp += cellMass * chunk.u[index]
+        ie += cellMass * chunk.energy0[kk, jj]
+        temp += cellMass * chunk.u[kk, jj]
     end
 
     if settings.check_result && is_solve_finished
@@ -38,13 +43,13 @@ function halo_update!(chunk::C, settings::Settings, depth::Int) where {C<:Chunk}
     end
 
     for (index, buffer) in [
-            (FIELD_DENSITY, :density),
-            (FIELD_P, :p),
-            (FIELD_ENERGY0, :energy0),
-            (FIELD_ENERGY1, :energy),
-            (FIELD_U, :u),
-            (FIELD_SD, :sd),
-        ]
+        (FIELD_DENSITY, :density),
+        (FIELD_P, :p),
+        (FIELD_ENERGY0, :energy0),
+        (FIELD_ENERGY1, :energy),
+        (FIELD_U, :u),
+        (FIELD_SD, :sd),
+    ]
 
         if settings.fields_to_exchange[index]
             update_face!(chunk, settings.halo_depth, depth, getfield(chunk, buffer))
@@ -57,22 +62,21 @@ function solve_finished!(chunk::C, settings::Settings) where {C<:Chunk}
     exact_error = 0.0
 
     if settings.check_result
-        calculate_residual!(chunk, settings.halo_depth) # Done
+        calculate_residual!(chunk, settings.halo_depth)
 
         exact_error += calculate_2norm(chunk, settings.halo_depth, chunk.r)
     end
 
-    finalise(chunk, settings.halo_depth)
+    finalise!(chunk, settings.halo_depth)
     settings.fields_to_exchange[FIELD_ENERGY1] = true
     halo_update!(chunk, settings, 1)
 end
 
 # Sparse Matrix Vector Product
-function smvp(chunk::C, a::Vector{Float64}, index::Int64)::Float64 where {C<:Chunk}
-    (1 + chunk.kx[index+1] + chunk.kx[index] + chunk.ky[index+chunk.x] + chunk.ky[index]) *
-    a[index]
-    -(chunk.kx[index+1] * a[index+1] + chunk.kx[index] * a[index-1])
-    -(chunk.ky[index+chunk.x] * a[index+chunk.x] + chunk.ky[index] * a[index-chunk.x])
+function smvp(chunk::C, a::Matrix{Float64}, x::Int, y::Int)::Float64 where {C<:Chunk}
+    (1 + chunk.kx[x+1, y] + chunk.kx[x, y] + chunk.ky[x, y+1] + chunk.ky[x, y]) * a[x, y]
+    -(chunk.kx[x+1, y] * a[x+1, y] + chunk.kx[x, y] * a[x-1, y])
+    -(chunk.ky[x, y+1] * a[x, y+1] + chunk.ky[x, y] * a[x, y-1])
 end
 
 # Updates faces in turn.
@@ -308,21 +312,21 @@ end
 
 # Calculates the current value of r
 function calculate_residual!(chunk::Chunk, hd::Int)
-    for kk in (hd:chunk.y-hd-1), jj in (hd+1:chunk.x-hd)
-        index = jj + kk * chunk.x
-        p = SMVP(chunk, chunk.u, index)
-        chunk.r[index] = chunk.u0[index] - p
+    for kk in (hd+1:chunk.y-hd-1), jj in (hd+1:chunk.x-hd)
+        p = smvp(chunk, chunk.u, kk, jj)
+        chunk.r[kk, jj] = chunk.u0[kk, jj] - p
     end
 end
 
 # Calculates the 2 norm of a given buffer
-function calculate_2norm(chunk::Chunk, hd::Int, buffer::Vector{Float64})
-    index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
-    return sum(buffer[index] .^ 2)
+function calculate_2norm(chunk::Chunk, hd::Int, buffer::AbstractMatrix{Float64})
+    return sum(buffer[hd+1:chunk.x-hd, hd+1:chunk.y-hd] .^ 2)
 end
 
 # Finalises the solution
 function finalise!(chunk::Chunk, hd::Int)
     index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
     @. chunk.energy[index] = chunk.u[index] / chunk.density[index]
+end
+
 end

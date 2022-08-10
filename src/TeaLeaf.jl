@@ -7,8 +7,7 @@ using Parameters
 
 include("./settings.jl")
 include("./chunk.jl")
-include("./kernel.jl")
-include("./diffuse.jl")
+include("./kernels.jl")
 
 include("./solvers/CG.jl")
 include("./solvers/Cheby.jl")
@@ -93,7 +92,7 @@ function diffuse!(chunk::C, settings::Settings) where {C<:Chunk}
         error = settings.solver.driver!(chunk, settings, rx, ry)
 
         # Perform solve finalisation tasks
-        solve_finished_driver(chunk, settings) # Done
+        solve_finished!(chunk, settings) # Done
 
         if tt % settings.summary_frequency == 0
             field_summary(chunk, settings, false) # Done
