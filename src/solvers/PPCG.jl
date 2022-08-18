@@ -5,19 +5,21 @@ import ..Settings
 
 # Initialises the PPCG solver
 function init(chunk::Chunk, hd::Int)
-    index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
-    @. chunk.sd[index] = chunk.r[index] / chunk.theta
+    x, y = size(chunk)
+    @. chunk.sd[hd+1:x-hd, hd+1:y-hd] = chunk.r[hd+1:x-hd, hd+1:y-hd] / chunk.theta
 end
 
 # The PPCG inner iteration
 function inner_iteration(chunk::Chunk, hd::Int, alpha::Float64, beta::Float64)
-    index = (hd+1:chunk.x-hd) + (hd+1:chunk.y-hd) * chunk.x
+    x, y = size(chunk)
+    kk = hd+1:x-hd
+    jj = hd+1:y-hd
 
-    p = smvp(chunk.sd)
-    chunk.r[index] .-= p
-    chunk.u[index] .+= chunk.sd[index]
+    p = smvp.(chunk, chunk.sd, zip(kk, jj))
+    chunk.r[kk, jj] .-= p
+    chunk.u[kk, jj] .+= chunk.sd[kk, jj]
 
-    @. chunk.sd[index] = alpha * chunk.sd[index] + beta * chunk.r[index]
+    @. chunk.sd[kk, jj] = alpha * chunk.sd[kk, jj] + beta * chunk.r[kk, jj]
 end
 
 end

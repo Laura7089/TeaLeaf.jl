@@ -16,7 +16,7 @@ include("./solvers/PPCG.jl")
 
 using TeaLeaf.Kernels
 
-# TODO: all the 2 and 3 starting loop indices are _definitely_ not right
+# TODO: fix all the indexing
 # TODO: doc comments -> docstrings
 # TODO: fix naming convention
 
@@ -26,14 +26,25 @@ using TeaLeaf.Kernels
 end
 
 function main()
-    settings, chunk = initialise_application()
+    settings = Settings()
+    chunk = initialiseapp!(settings)
     diffuse!(chunk, settings)
 end
 
-function initialise_application()
-    settings = Settings()
-    states = read_config!(settings)
-    parseflags!(settings)
+function initialiseapp!(
+    settings::Settings,
+    useconfig = true,
+    configfile = "tea.in",
+    useflags = true,
+)
+    if useconfig
+        readconfig!(settings, configfile)
+    end
+    if useflags
+        parseflags!(settings)
+    end
+
+    states = readstates(settings)
 
     chunk = Chunk(settings)
     set_chunk_data!(settings, chunk)
@@ -48,9 +59,9 @@ function initialise_application()
     # TODO: is depth=1 correct here?
     haloupdate!(chunk, settings, 1)
 
-    store_energy!(chunk)
+    chunk.energy .= chunk.energy0
 
-    return (settings, chunk)
+    return chunk
 end
 
 # The main timestep loop

@@ -1,4 +1,5 @@
 export Chunk
+export chunksize
 export CHUNK_FIELDS
 export CHUNK_LEFT, CHUNK_RIGHT, CHUNK_TOP, CHUNK_BOTTOM
 
@@ -22,34 +23,34 @@ end
     y::Int
 
     # Field buffers
-    density0::T = Array{Float64}(undef, x, y)
-    density::T = Array{Float64}(undef, x, y)
-    energy0::T = Array{Float64}(undef, x, y)
-    energy::T = Array{Float64}(undef, x, y)
+    density0::T = zeros(x, y)
+    density::T = zeros(x, y)
+    energy0::T = zeros(x, y)
+    energy::T = zeros(x, y)
 
-    u::T = Array{Float64}(undef, x, y)
-    u0::T = Array{Float64}(undef, x, y)
-    p::T = Array{Float64}(undef, x, y)
-    r::T = Array{Float64}(undef, x, y)
-    mi::T = Array{Float64}(undef, x, y)
-    w::T = Array{Float64}(undef, x, y)
-    kx::T = Array{Float64}(undef, x, y)
-    ky::T = Array{Float64}(undef, x, y)
-    sd::T = Array{Float64}(undef, x, y)
+    u::T = zeros(x, y)
+    u0::T = zeros(x, y)
+    p::T = zeros(x, y)
+    r::T = zeros(x, y)
+    mi::T = zeros(x, y)
+    w::T = zeros(x, y)
+    kx::T = zeros(x, y)
+    ky::T = zeros(x, y)
+    sd::T = zeros(x, y)
 
-    cellx::AbstractVector{Float64} = Array{Float64}(undef, x)
-    celly::AbstractVector{Float64} = Array{Float64}(undef, y)
-    celldx::AbstractVector{Float64} = Array{Float64}(undef, x)
-    celldy::AbstractVector{Float64} = Array{Float64}(undef, y)
+    cellx::AbstractVector{Float64} = zeros(x)
+    celly::AbstractVector{Float64} = zeros(y)
+    celldx::AbstractVector{Float64} = zeros(x)
+    celldy::AbstractVector{Float64} = zeros(y)
 
-    vertexdx::AbstractVector{Float64} = Array{Float64}(undef, x + 1)
-    vertexdy::AbstractVector{Float64} = Array{Float64}(undef, y + 1)
-    vertexx::AbstractVector{Float64} = Array{Float64}(undef, x + 1)
-    vertexy::AbstractVector{Float64} = Array{Float64}(undef, y + 1)
+    vertexdx::AbstractVector{Float64} = zeros(x + 1)
+    vertexdy::AbstractVector{Float64} = zeros(y + 1)
+    vertexx::AbstractVector{Float64} = zeros(x + 1)
+    vertexy::AbstractVector{Float64} = zeros(y + 1)
 
-    volume::T = Array{Float64}(undef, x, y)
-    xarea::T = Array{Float64}(undef, x + 1, y)
-    yarea::T = Array{Float64}(undef, x, y + 1)
+    volume::T = zeros(x, y)
+    xarea::T = zeros(x + 1, y)
+    yarea::T = zeros(x, y + 1)
 
     # Cheby and PPCG
     # TODO: are these read outside of these solvers?
@@ -62,18 +63,19 @@ end
     chebyα::Vector{Float64}
     chebyβ::Vector{Float64}
 end
+Broadcast.broadcastable(c::Chunk) = Ref(c)
 
 # Initialise the chunk
 function Chunk(settings::Settings)
     @info "Performing this solve with solver" settings.solver
-    chunkx = settings.xcells + settings.halodepth * 2
-    chunky = settings.ycells + settings.halodepth * 2
+    chunkx = settings.xcells + 2settings.halodepth
+    chunky = settings.ycells + 2settings.halodepth
 
     lr_len = chunky * settings.halodepth * NUM_FIELDS
     tb_len = chunkx * settings.halodepth * NUM_FIELDS
 
-    x_inner = chunkx - 2 * settings.halodepth
-    y_inner = chunky - 2 * settings.halodepth
+    x_inner = chunkx - 2settings.halodepth
+    y_inner = chunky - 2settings.halodepth
 
     return Chunk(
         # Initialise the key variables
@@ -82,26 +84,29 @@ function Chunk(settings::Settings)
         dtinit = settings.dtinit,
 
         # Solver-specific
-        cgα = Array{Float64}(undef, settings.maxiters),
-        cgβ = Array{Float64}(undef, settings.maxiters),
-        chebyα = Array{Float64}(undef, settings.maxiters),
-        chebyβ = Array{Float64}(undef, settings.maxiters),
+        cgα = zeros(settings.maxiters),
+        cgβ = zeros(settings.maxiters),
+        chebyα = zeros(settings.maxiters),
+        chebyβ = zeros(settings.maxiters),
     )
 end
+
+Base.size(c::Chunk) = size(c.density0)
 
 function set_chunk_data!(settings::Settings, chunk::Chunk)
     xmin = settings.xmin + settings.dx
     ymin = settings.ymin + settings.dy
+    xₛ, yₛ = size(chunk)
 
-    xᵢ = 2:chunk.x+1
+    xᵢ = 2:xₛ+1
     @. chunk.vertexx[xᵢ] = xmin + settings.dx * (xᵢ - settings.halodepth)
-    yᵢ = 2:chunk.y+1
+    yᵢ = 2:yₛ+1
     @. chunk.vertexy[yᵢ] = ymin + settings.dy * (yᵢ - settings.halodepth)
 
-    xᵢ = 2:chunk.x
-    @. chunk.cellx[xᵢ] = 0.5 * (chunk.vertexx[xᵢ] + chunk.vertexx[3:chunk.x+1])
-    yᵢ = 2:chunk.y
-    @. chunk.celly[yᵢ] = 0.5 * (chunk.vertexy[yᵢ] + chunk.vertexy[3:chunk.y+1])
+    xᵢ = 2:xₛ
+    @. chunk.cellx[xᵢ] = 0.5(chunk.vertexx[xᵢ] + chunk.vertexx[3:xₛ+1])
+    yᵢ = 2:yₛ
+    @. chunk.celly[yᵢ] = 0.5(chunk.vertexy[yᵢ] + chunk.vertexy[3:yₛ+1])
 
     chunk.volume .= settings.dx * settings.dy
     chunk.xarea .= settings.dy
@@ -113,8 +118,10 @@ function set_chunk_state!(chunk::Chunk, states::Vector{State})
     chunk.energy0 .= states[1].energy
     chunk.density .= states[1].density
 
+    x, y = size(chunk)
+
     # Apply all of the states in turn
-    for ss in eachindex(states), jj = 1:chunk.y, kk = 1:chunk.x
+    for ss in eachindex(states), jj = 1:y, kk = 1:x
         apply_state = @match states[ss].geometry begin
             Rectangular => all((
                 chunk.vertexx[kk+1] >= states[ss].xmin,
@@ -143,6 +150,5 @@ function set_chunk_state!(chunk::Chunk, states::Vector{State})
 
     # Set an initial state for u
     # TODO: correct indexing?
-    @. chunk.u[1:chunk.x-1, 1:chunk.y-1] =
-        chunk.energy0[1:chunk.x-1, 1:chunk.y-1] * chunk.density[1:chunk.x-1, 1:chunk.y-1]
+    @. chunk.u[1:x-1, 1:y-1] = chunk.energy0[1:x-1, 1:y-1] * chunk.density[1:x-1, 1:y-1]
 end

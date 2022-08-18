@@ -1,35 +1,31 @@
 module Jacobi
 
-import ..Chunk
-import ..Settings
+using TeaLeaf
+using TeaLeaf.Kernels
 
 # Performs a full solve with the Jacobi solver kernels
-function driver(
-    chunks::Vector{Chunk},
+function driver!(
+    chunk::C,
     settings::Settings,
     rx::Float64,
     ry::Float64,
-)::Float64
-    init_driver!(chunks, settings, rx, ry) # Done
+)::Float64 where {C<:Chunk}
+    init!(chunk, settings, rx, ry)
     final_time = 0
     error = ERROR_START
 
     # Iterate till convergence
-    for tt = 1:settings.max_iters
-        error += iterate!.(chunks, settings.halo_depth) |> sum
+    for tt = 1:settings.maxiters
+        error += iterate!(chunk, settings.halodepth)
 
         if tt % 50 == 0
-            halo_update!(chunks, settings, 1)
+            haloupdate!(chunk, settings, 1)
 
-            for c in chunks
-                calculate_residual!(c, settings.halo_depth)
-                error += calculate_2norm(c, settings.halo_depth, c.r)
-            end
+            residual!(chunk, settings.halodepth)
+            error += twonorm(chunk, settings.halodepth, chunk.r)
         end
 
-        @debug "" error
-
-        halo_update!(chunks, settings, 1)
+        haloupdate!(chunk, settings, 1)
 
         final_time = tt
         if abs(error) < settings.eps
@@ -41,69 +37,53 @@ function driver(
     return error
 end
 
-function init_driver!(chunks::Vector{Chunk}, settings::Settings, rx::Float64, ry::Float64)
-    for c in chunks
-        init!(c, settings.halo_depth, settings.coefficient, rx, ry)
-        copy_u!(c, settings.halo_depth)
+function init!(chunk::C, set::Settings, rx::Float64, ry::Float64) where {C<:Chunk}
+    if set.coefficient < min(CONDUCTIVITY, RECIP_CONDUCTIVITY)
+        throw("Coefficient $(set.coefficient) is not valid.")
     end
 
-    # Need to update for the matvec
-    settings.fields_to_exchange .= false
-    settings.fields_to_exchange[FIELD_U] = true
+    x, y = size(chunk)
+    temp = chunk.energy .* chunk.density
+    chunk.u0 .= temp
+    chunk.u .= temp
+
+    p = set.coefficient == CONDUCTIVITY ? 1 : -1
+    for jj = set.halodepth+1:y-1, kk = set.halodepth+1:x-1
+        densc = chunk.density[kk, jj]^p
+        densl = chunk.density[kk-1, jj]^p
+        densd = chunk.density[kk, jj-1]^p
+
+        chunk.kx[kk, jj] = rx * (densl + densc) / (2densl * densc)
+        chunk.ky[kk, jj] = ry * (densd + densc) / (2densd * densc)
+    end
+
+    copyu!(chunk, set.halodepth)
+
+    setindex!.(Ref(set.toexchange), false, CHUNK_FIELDS)
+    set.toexchange[:u] = true
 end
 
-function init!(chunk::Chunk, hd::Int, coef::Int, rx::Float64, ry::Float64)
-    if coef < CONDUCTIVITY && coef < RECIP_CONDUCTIVITY
-        throw("Coefficient $(coef) is not valid.")
-    end
-
-    index = @. (1:chunk.x-1) + (1:chunk.y-1) * chunk.x
-    temp = chunk.energy[index] .* chunk.density[index]
-    chunk.u0[index] .= temp
-    chunk.u[index] .= temp
-
-    for jj = hd+1:chunk.y-1, kk = hd+1:chunk.x-1
-        index = kk + jj * chunk.x
-        densc = (coef == CONDUCTIVITY) ? chunk.density[index] : 1.0 / chunk.density[index]
-        densl =
-            (coef == CONDUCTIVITY) ? chunk.density[index-1] : 1.0 / chunk.density[index-1]
-        densd =
-            (coef == CONDUCTIVITY) ? chunk.density[index-chunk.x] :
-            1.0 / chunk.density[index-chunk.x]
-
-        chunk.kx[index] = rx * (densl + densc) / (2.0 * densl * densc)
-        chunk.ky[index] = ry * (densd + densc) / (2.0 * densd * densc)
-    end
-end
-
-function iterate(chunk::Chunk, hd::Int)::Float64
-    index = @. (1:chunk.x) + ((0:chunk.y-1) * chunk.x)
-    chunk.r[index] .= chunk.u[index]
-
-    err = 0.0
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        index = kk + (jj - 1) * chunk.x
-        chunk.u[index] =
+function iterate!(chunk::Chunk, hd::Int)::Float64
+    x, y = size(chunk)
+    chunk.r .= chunk.u
+    for jj = hd+1:y-hd, kk = hd+1:x-hd
+        chunk.u[kk, jj] =
             (
-                chunk.u0[index] +
-                (
-                    chunk.kx[index+1] * chunk.r[index+1] +
-                    chunk.kx[index] * chunk.r[index-1]
-                ) +
-                (
-                    chunk.ky[index+chunk.x] * chunk.r[index+chunk.x] +
-                    chunk.ky[index] * chunk.r[index-chunk.x]
-                )
+                chunk.u0[kk, jj] +
+                chunk.kx[kk+1, jj] * chunk.r[kk+1, jj] +
+                chunk.kx[kk, jj] * chunk.r[kk-1, jj] +
+                chunk.ky[kk, jj+1] * chunk.r[kk, jj+1] +
+                chunk.ky[kk, jj] * chunk.r[kk, jj-1]
             ) / (
-                1.0 +
-                (chunk.kx[index] + chunk.kx[index+1]) +
-                (chunk.ky[index] + chunk.ky[index+chunk.x])
+                1 +
+                chunk.kx[kk, jj] +
+                chunk.kx[kk+1, jj] +
+                chunk.ky[kk, jj] +
+                chunk.ky[kk, jj+1]
             )
-
-        err += abs(chunk.u[index] - chunk.r[index])
     end
 
-    return err
+    return abs.(chunk.u .- chunk.r) |> sum
 end
 
 end

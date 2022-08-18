@@ -26,7 +26,7 @@ function driver!(
     # Iterate till convergence
     for tt = 1:set.maxiters
         iters = tt
-        rro, error = mainstep(chunk, set, tt, rro)
+        rro, error = mainstep!(chunk, set, tt, rro)
 
         haloupdate!(chunk, set, 1)
 
@@ -40,7 +40,7 @@ function driver!(
 end
 
 # Invokes the main CG solve kernels
-function mainstep(
+function mainstep!(
     chunk::C,
     settings::Settings,
     tt::Int,
@@ -67,35 +67,34 @@ function init!(
     rx::Float64,
     ry::Float64,
 ) where {C<:Chunk}
-    if coefficient != CONDUCTIVITY && coefficient != RECIP_CONDUCTIVITY
+    if !(coefficient in (CONDUCTIVITY, RECIP_CONDUCTIVITY))
         throw("Coefficient $(coefficient) is not valid.")
     end
 
-    for jj = 1:chunk.y, kk = 1:chunk.x
-        chunk.u[kk, jj] = chunk.energy[kk, jj] * chunk.density[kk, jj]
-    end
+    @. chunk.u = chunk.energy * chunk.density
     chunk.p .= 0.0
     chunk.r .= 0.0
 
-    for jj = 2:chunk.y-1, kk = 2:chunk.x-1
-        chunk.w[kk, jj] =
-            (coefficient == CONDUCTIVITY) ? chunk.density[kk, jj] :
-            1.0 / chunk.density[kk, jj]
-    end
+    x, y = size(chunk)
 
-    for jj = hd+1:chunk.y-1, kk = hd+1:chunk.x-1
+    modifier = coefficient == CONDUCTIVITY ? 1 : -1
+    jj = 2:y-1
+    kk = 2:x-1
+    @. chunk.w[kk, jj] = chunk.density[kk, jj]^modifier
+
+    for jj = hd+1:y-2, kk = hd+1:x-2
         chunk.kx[kk, jj] =
             rx * (chunk.w[kk-1, jj] + chunk.w[kk, jj]) /
-            (2.0 * chunk.w[kk-1, jj] * chunk.w[kk, jj])
+            (2chunk.w[kk-1, jj] * chunk.w[kk, jj])
         chunk.ky[kk, jj] =
             ry * (chunk.w[kk, jj-1] + chunk.w[kk, jj]) /
-            (2.0 * chunk.w[kk, jj-1] * chunk.w[kk, jj])
+            (2chunk.w[kk, jj-1] * chunk.w[kk, jj])
     end
 
     rro_temp = 0.0
 
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        p = smvp(chunk, chunk.u, kk, jj)
+    for jj = hd+1:y-hd, kk = hd+1:x-hd
+        p = smvp(chunk, chunk.u, (kk, jj))
         chunk.w[kk, jj] = p
         chunk.r[kk, jj] = chunk.u[kk, jj] - chunk.w[kk, jj]
         chunk.p[kk, jj] = chunk.r[kk, jj]
@@ -109,8 +108,9 @@ end
 function w!(chunk::C, hd::Int) where {C<:Chunk}
     pw_temp = 0.0
 
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        p = smvp(chunk, chunk.p, kk, jj)
+    x, y = size(chunk)
+    for jj = hd+1:y-hd, kk = hd+1:x-hd
+        p = smvp(chunk, chunk.p, (kk, jj))
         chunk.w[kk, jj] = p
         pw_temp += chunk.w[kk, jj] * chunk.p[kk, jj]
     end
@@ -120,22 +120,20 @@ end
 
 # Calculates u and r
 function ur!(chunk::C, hd::Int, alpha::Float64) where {C<:Chunk}
-    rrn_temp = 0.0
-
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        chunk.u[kk, jj] += alpha * chunk.p[kk, jj]
-        chunk.r[kk, jj] -= alpha * chunk.w[kk, jj]
-        rrn_temp += chunk.r[kk, jj] * chunk.r[kk, jj]
-    end
-
-    return rrn_temp
+    x, y = size(chunk)
+    kk = hd+1:x-hd
+    jj = hd+1:y-hd
+    @. chunk.u[kk, jj] += alpha * chunk.p[kk, jj]
+    @. chunk.r[kk, jj] -= alpha * chunk.w[kk, jj]
+    return sum(chunk.r[kk, jj] .* chunk.r[kk, jj])
 end
 
 # Calculates p
 function p!(chunk::C, hd::Int, beta::Float64) where {C<:Chunk}
-    for jj = hd+1:chunk.y-hd, kk = hd+1:chunk.x-hd
-        chunk.p[kk, jj] = beta * chunk.p[kk, jj] + chunk.r[kk, jj]
-    end
+    x, y = size(chunk)
+    kk = hd+1:x-hd
+    jj = hd+1:y-hd
+    @. chunk.p[kk, jj] = beta * chunk.p[kk, jj] + chunk.r[kk, jj]
 end
 
 end

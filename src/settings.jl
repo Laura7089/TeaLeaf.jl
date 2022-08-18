@@ -1,6 +1,6 @@
 export Settings
 export CONDUCTIVITY, RECIP_CONDUCTIVITY
-export get_checking_value
+export checkingvalue
 
 # The accepted types of state geometry
 @enum Geometry Rectangular Circular Point
@@ -29,7 +29,7 @@ end
     coefficient::Int = CONDUCTIVITY
     ppcg_inner_steps::Int = 10
     summaryfrequency::Int = 10
-    halodepth::Int = 1
+    halodepth::Int = 2
     # Fields to exchange
     toexchange::Dict{Symbol,Bool} = Dict(zip(CHUNK_FIELDS, fill(false, 6)))
 
@@ -43,11 +43,6 @@ end
     dtinit::Float64 = 0.1
     endtime::Float64 = 10.0
     epslim::Float64 = 1e-5
-
-    # Input-Output files
-    infile::String = "tea.in"
-    outfile::String = "tea.out"
-    testproblemfile::String = "tea.problems"
 
     solver::Module = CG
 
@@ -65,20 +60,16 @@ end
 end
 Broadcast.broadcastable(s::Settings) = Ref(s)
 
-function read_config!(settings::Settings)::Vector{State}
-    states = []
+function readconfig!(settings::Settings, infile)
     # Open the configuration file
-    @info "Reading configuration from $(settings.infile)"
-    open(settings.infile, read = true) do tea_in
+    @info "Reading configuration from $(infile)"
+    open(infile, read = true) do tea_in
         while !eof(tea_in)
             line = readline(tea_in)
             @debug "Config line:" line
 
             # TODO: get test problems here too?
-            if startswith(line, "state")
-                push!(states, read_state(line, settings))
-                continue
-            elseif startswith(line, "*") || !occursin("=", line)
+            if startswith(line, "state") || startswith(line, "*") || !occursin("=", line)
                 continue
             end
 
@@ -100,6 +91,25 @@ function read_config!(settings::Settings)::Vector{State}
     end
 
     @info "Solution Parameters" settings
+end
+
+function readstates(settings::Settings, infile = "tea.in")::Vector{State}
+    states = []
+    # Open the configuration file
+    @info "Reading state configuration from $(infile)"
+    open(infile, read = true) do tea_in
+        while !eof(tea_in)
+            line = readline(tea_in)
+            @debug "Config line:" line
+
+            # TODO: get test problems here too?
+            if !startswith(line, "state") || startswith(line, "*") || !occursin("=", line)
+                continue
+            end
+
+            push!(states, readstate(line, settings))
+        end
+    end
 
     for (ss, state) in enumerate(states)
         @debug "State $(ss)" state.density state.energy state.xmin state.ymin state.x_max state.ymax state.radius state.geometry
@@ -107,7 +117,7 @@ function read_config!(settings::Settings)::Vector{State}
     return states
 end
 
-function read_state(line, settings::Settings)::State
+function readstate(line, settings::Settings)::State
     thesplit = split(line, " ")
 
     state_num = parse(Int, thesplit[2])
@@ -142,6 +152,7 @@ function read_state(line, settings::Settings)::State
 end
 
 function parseflags!(settings::Settings)
+    @info "Parsing flags..."
     s = ArgParseSettings()
 
     @add_arg_table s begin
@@ -172,8 +183,8 @@ function parseflags!(settings::Settings)
 end
 
 # Fetches the checking value from the test problems file
-function get_checking_value(settings::Settings)::Float64
-    open(settings.testproblemfile, read = true) do file
+function checkingvalue(settings::Settings, problemfile = "tea.problems")::Float64
+    open(problemfile, read = true) do file
         # Get the number of states present in the config file
         while !eof(file)
             thesplit = split(readline(file), " ")
