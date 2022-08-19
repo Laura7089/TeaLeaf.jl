@@ -9,6 +9,12 @@ interactive:
     julia --project -ie 'using TeaLeaf; fa() = format("{{ SRC_PATH }}");'
 alias i := interactive
 
+# Get an interactive debugger
+debug:
+    julia --project -ie 'using Debugger, Logging, TeaLeaf; \
+        disable_logging(Logging.Error)'
+alias d := debug
+
 # Run TeaLeaf.jl's default entrypoint
 run: # No compile dep since julia handles that for us
     julia --project -e 'using TeaLeaf; main()'
