@@ -1,7 +1,7 @@
 export Chunk
 export chunksize
 export CHUNK_FIELDS
-export halo, haloc
+export halo, haloa
 
 @consts begin
     CHUNK_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
@@ -80,8 +80,8 @@ end
 
 Base.size(c::Chunk) = size(c.density0)
 Base.axes(c::Chunk) = axes(c.density0)
-halo(c::Chunk, hd::Int) = Tuple(ax[begin+hd:end-hd] for ax in axes(c))
-haloc(c::Chunk, hd::Int) = CartesianIndices(halo(c, hd))
+haloa(c::Chunk, hd::Int) = Tuple(ax[begin+hd:end-hd] for ax in axes(c))
+halo(c::Chunk, hd::Int) = CartesianIndices(haloa(c, hd))
 
 function set_chunk_data!(settings::Settings, chunk::Chunk)
     xmin = settings.xmin + settings.dx
@@ -138,6 +138,6 @@ function set_chunk_state!(chunk::Chunk, states::Vector{State})
     end
 
     # Set an initial state for u
-    I = haloc(chunk, 1) # note hardcoded 1
+    I = halo(chunk, 1) # note hardcoded 1
     @. chunk.u[I] = chunk.energy0[I] * chunk.density[I]
 end

@@ -23,7 +23,7 @@ function driver!(
             haloupdate!(chunk, settings, 1)
 
             residual!(chunk, settings.halodepth)
-            error += norm(chunk.r[haloc(chunk, settings.halodepth)])
+            error += norm(chunk.r[halo(chunk, settings.halodepth)])
         end
 
         haloupdate!(chunk, settings, 1)

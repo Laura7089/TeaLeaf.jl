@@ -9,7 +9,7 @@ const ERROR_START = 1e+10
 const ERROR_SWITCH_MAX = 1.0
 
 function fieldsummary(chunk::C, set::Settings, solvefin::Bool) where {C<:Chunk}
-    H = haloc(chunk, set.halodepth)
+    H = halo(chunk, set.halodepth)
     temp = sum(chunk.volume[H] .* chunk.density[H] .* chunk.u[H])
 
     if set.checkresult && solvefin
@@ -40,7 +40,7 @@ function solvefinished!(chunk::C, set::Settings) where {C<:Chunk}
 
     if set.checkresult
         residual!(chunk, set.halodepth)
-        exact_error += norm(chunk.r[haloc(chunk, set.halodepth)])
+        exact_error += norm(chunk.r[halo(chunk, set.halodepth)])
     end
 
     finalise!(chunk, set.halodepth)
@@ -50,12 +50,13 @@ end
 
 # Sparse Matrix Vector Product
 # TODO: what the hell is this trying to do???
+# TODO: do all the broadcast operations on this change the result due to ordering?
 function smvp(
     chunk::C,
     a::AbstractMatrix{Float64},
-    index::Tuple{Int,Int},
+    index::CartesianIndex,
 )::Float64 where {C<:Chunk}
-    x, y = index
+    x, y = Tuple(index)
     consum = sum((1, chunk.kx[x+1, y], chunk.kx[x, y], chunk.ky[x, y+1], chunk.ky[x, y]))
     return consum * a[x, y]
     -(chunk.kx[x+1, y] * a[x+1, y] + chunk.kx[x, y] * a[x-1, y])
@@ -70,7 +71,7 @@ function updateface!(
     buffer::B,
 ) where {C<:Chunk,B<:AbstractMatrix{Float64}}
     x, y = size(chunk)
-    xs, ys = halo(chunk, hd)
+    xs, ys = haloa(chunk, hd)
     # Update left halo.
     for kk = 1:depth
         # TODO: is the +1 right?
@@ -93,22 +94,19 @@ end
 
 # Copies the current u into u0
 function copyu!(chunk::Chunk, hd::Int)
-    H = haloc(chunk, hd)
+    H = halo(chunk, hd)
     chunk.u0[H] .= chunk.u[H]
 end
 
 # Calculates the current value of r
 function residual!(chunk::Chunk, hd::Int)
-    xs, ys = halo(chunk, hd)
-    for jj in ys, kk in xs
-        p = smvp(chunk, chunk.u, (kk, jj))
-        chunk.r[kk, jj] = chunk.u0[kk, jj] - p
-    end
+    H = halo(chunk, hd)
+    chunk.r[H] .= chunk.u0[H] - smvp.(chunk, Ref(chunk.u), H)
 end
 
 # Finalises the solution
 function finalise!(chunk::Chunk, hd::Int)
-    H = haloc(chunk, hd)
+    H = halo(chunk, hd)
     @. chunk.energy[H] = chunk.u[H] / chunk.density[H]
 end
 

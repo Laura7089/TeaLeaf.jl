@@ -72,9 +72,8 @@ function init!(
     x, y = size(chunk)
 
     modifier = coefficient == CONDUCTIVITY ? 1 : -1
-    jj = 2:y-1
-    kk = 2:x-1
-    @. chunk.w[kk, jj] = chunk.density[kk, jj]^modifier
+    H = halo(chunk, 1)
+    @. chunk.w[H] = chunk.density[H]^modifier
 
     for jj = hd+1:y-1, kk = hd+1:x-1
         chunk.kx[kk, jj] =
@@ -85,33 +84,23 @@ function init!(
             (2chunk.w[kk, jj-1] * chunk.w[kk, jj])
     end
 
-    rro_temp = 0.0
-
-    for jj = hd+1:y-hd, kk = hd+1:x-hd
-        chunk.w[kk, jj] = smvp(chunk, chunk.u, (kk, jj))
-        chunk.r[kk, jj] = chunk.u[kk, jj] - chunk.w[kk, jj]
-        chunk.p[kk, jj] = chunk.r[kk, jj]
-        rro_temp += chunk.r[kk, jj] * chunk.p[kk, jj]
-    end
-
-    return rro_temp
+    H = halo(chunk, hd)
+    chunk.w[H] .= smvp.(chunk, Ref(chunk.u), H)
+    chunk.r[H] .= chunk.u[H] .- chunk.w[H]
+    chunk.p[H] .= chunk.r[H]
+    return sum(chunk.r[H] .* chunk.p[H])
 end
 
 # Calculates w
 function w!(chunk::C, hd::Int) where {C<:Chunk}
-    pw_temp = 0.0
-    x, y = size(chunk)
-    for jj = hd+1:y-hd, kk = hd+1:x-hd
-        chunk.w[kk, jj] = smvp(chunk, chunk.p, (kk, jj))
-        pw_temp += chunk.w[kk, jj] * chunk.p[kk, jj]
-    end
-
-    return pw_temp
+    H = halo(chunk, hd)
+    chunk.w[H] .= smvp.(chunk, Ref(chunk.p), H)
+    return sum(chunk.w[H] .* chunk.p[H])
 end
 
 # Calculates u and r
 function ur!(chunk::C, hd::Int, alpha::Float64) where {C<:Chunk}
-    H = haloc(chunk, hd)
+    H = halo(chunk, hd)
     @. chunk.u[H] += alpha * chunk.p[H]
     @. chunk.r[H] -= alpha * chunk.w[H]
     return norm(chunk.r[H])
@@ -119,7 +108,7 @@ end
 
 # Calculates p
 function p!(chunk::C, hd::Int, beta::Float64) where {C<:Chunk}
-    H = haloc(chunk, hd)
+    H = halo(chunk, hd)
     @. chunk.p[H] = beta * chunk.p[H] + chunk.r[H]
 end
 
