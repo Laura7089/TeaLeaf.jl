@@ -1,6 +1,7 @@
 export Settings
 export CONDUCTIVITY, RECIP_CONDUCTIVITY
 export checkingvalue
+export resettoexchange!
 
 # The accepted types of state geometry
 @enum Geometry Rectangular Circular Point
@@ -55,10 +56,11 @@ end
     xmax::Float64 = 100.0
     ymax::Float64 = 100.0
 
-    dx::Float64 = 0.0
-    dy::Float64 = 0.0
+    dx::Float64 = (xmax - xmin) / xcells
+    dy::Float64 = (ymax - ymin) / ycells
 end
 Broadcast.broadcastable(s::Settings) = Ref(s)
+resettoexchange!(s::Settings) = setindex!.(Ref(s.toexchange), false, CHUNK_FIELDS)
 
 function readconfig!(settings::Settings, infile)
     # Open the configuration file

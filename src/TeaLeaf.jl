@@ -52,7 +52,7 @@ function initialiseapp!(
 
     # Prime the initial halo data
     # settings.toexchange .= false
-    setindex!.(Ref(settings.toexchange), false, CHUNK_FIELDS)
+    resettoexchange!(settings)
     settings.toexchange[:density] = true
     settings.toexchange[:energy0] = true
     settings.toexchange[:energy1] = true
@@ -70,18 +70,18 @@ function diffuse!(chunk::C, set::Settings) where {C<:Chunk}
         # Calculate minimum timestep information
         dt = min(chunk.dtinit, set.dtinit)
 
-        rx = dt / (set.dx * set.dx)
-        ry = dt / (set.dy * set.dy)
+        rx = dt / set.dx^2
+        ry = dt / set.dy^2
 
         # Prepare halo regions for solve
-        setindex!.(Ref(set.toexchange), false, CHUNK_FIELDS)
+        resettoexchange!(set)
         set.toexchange[:energy1] = true
         set.toexchange[:density] = true
         # TODO: is depth=1 correct here?
         haloupdate!(chunk, set, 1)
 
         # Perform the solve with one of the integrated solvers
-        error = set.solver.driver!(chunk, set, rx, ry)
+        error = set.solver.solve!(chunk, set, rx, ry)
 
         # Perform solve finalisation tasks
         solvefinished!(chunk, set)
@@ -90,7 +90,7 @@ function diffuse!(chunk::C, set::Settings) where {C<:Chunk}
             fieldsummary(chunk, set, false)
         end
 
-        @info "Timestep finished" tt error
+        @info "Timestep $(tt) finished" set.solver error
     end
     fieldsummary(chunk, set, true)
 end

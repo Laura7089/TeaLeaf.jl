@@ -1,16 +1,10 @@
 export Chunk
 export chunksize
 export CHUNK_FIELDS
-export CHUNK_LEFT, CHUNK_RIGHT, CHUNK_TOP, CHUNK_BOTTOM
+export halo, haloc
 
 @consts begin
-    CHUNK_LEFT = 1
-    CHUNK_RIGHT = 2
-    CHUNK_BOTTOM = 3
-    CHUNK_TOP = 4
-
     CHUNK_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
-
     NUM_FIELDS = 6
 end
 
@@ -67,15 +61,8 @@ Broadcast.broadcastable(c::Chunk) = Ref(c)
 
 # Initialise the chunk
 function Chunk(settings::Settings)
-    @info "Performing this solve with solver" settings.solver
     chunkx = settings.xcells + 2settings.halodepth
     chunky = settings.ycells + 2settings.halodepth
-
-    lr_len = chunky * settings.halodepth * NUM_FIELDS
-    tb_len = chunkx * settings.halodepth * NUM_FIELDS
-
-    x_inner = chunkx - 2settings.halodepth
-    y_inner = chunky - 2settings.halodepth
 
     return Chunk(
         # Initialise the key variables
@@ -92,21 +79,23 @@ function Chunk(settings::Settings)
 end
 
 Base.size(c::Chunk) = size(c.density0)
+Base.axes(c::Chunk) = axes(c.density0)
+halo(c::Chunk, hd::Int) = Tuple(ax[begin+hd:end-hd] for ax in axes(c))
+haloc(c::Chunk, hd::Int) = CartesianIndices(halo(c, hd))
 
 function set_chunk_data!(settings::Settings, chunk::Chunk)
     xmin = settings.xmin + settings.dx
     ymin = settings.ymin + settings.dy
     xₛ, yₛ = size(chunk)
 
-    xᵢ = 2:xₛ+1
-    @. chunk.vertexx[xᵢ] = xmin + settings.dx * (xᵢ - settings.halodepth)
-    yᵢ = 2:yₛ+1
-    @. chunk.vertexy[yᵢ] = ymin + settings.dy * (yᵢ - settings.halodepth)
+    xᵢ = 1:xₛ+1
+    @. chunk.vertexx[xᵢ] = xmin + settings.dx * (xᵢ - settings.halodepth - 1)
+    yᵢ = 1:yₛ+1
+    @. chunk.vertexy[yᵢ] = ymin + settings.dy * (yᵢ - settings.halodepth - 1)
 
-    xᵢ = 2:xₛ
-    @. chunk.cellx[xᵢ] = 0.5(chunk.vertexx[xᵢ] + chunk.vertexx[3:xₛ+1])
-    yᵢ = 2:yₛ
-    @. chunk.celly[yᵢ] = 0.5(chunk.vertexy[yᵢ] + chunk.vertexy[3:yₛ+1])
+    xᵢ, yᵢ = axes(chunk)
+    @. chunk.cellx = 0.5(chunk.vertexx[xᵢ] + chunk.vertexx[xᵢ+1])
+    @. chunk.celly = 0.5(chunk.vertexy[yᵢ] + chunk.vertexy[yᵢ+1])
 
     chunk.volume .= settings.dx * settings.dy
     chunk.xarea .= settings.dy
@@ -149,6 +138,6 @@ function set_chunk_state!(chunk::Chunk, states::Vector{State})
     end
 
     # Set an initial state for u
-    # TODO: correct indexing?
-    @. chunk.u[1:x-1, 1:y-1] = chunk.energy0[1:x-1, 1:y-1] * chunk.density[1:x-1, 1:y-1]
+    I = haloc(chunk, 1) # note hardcoded 1
+    @. chunk.u[I] = chunk.energy0[I] * chunk.density[I]
 end

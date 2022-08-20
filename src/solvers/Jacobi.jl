@@ -2,6 +2,7 @@ module Jacobi
 
 using TeaLeaf
 using TeaLeaf.Kernels
+using LinearAlgebra: norm
 
 # Performs a full solve with the Jacobi solver kernels
 function driver!(
@@ -22,7 +23,7 @@ function driver!(
             haloupdate!(chunk, settings, 1)
 
             residual!(chunk, settings.halodepth)
-            error += twonorm(chunk, settings.halodepth, chunk.r)
+            error += norm(chunk.r[haloc(chunk, settings.halodepth)])
         end
 
         haloupdate!(chunk, settings, 1)
@@ -59,7 +60,7 @@ function init!(chunk::C, set::Settings, rx::Float64, ry::Float64) where {C<:Chun
 
     copyu!(chunk, set.halodepth)
 
-    setindex!.(Ref(set.toexchange), false, CHUNK_FIELDS)
+    resettoexchange!(set)
     set.toexchange[:u] = true
 end
 
