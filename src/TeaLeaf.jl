@@ -90,7 +90,7 @@ function diffuse!(chunk::C, set::Settings) where {C<:Chunk}
             fieldsummary(chunk, set, false)
         end
 
-        @info "Timestep $(tt) finished" set.solver error
+        @info "Timestep $(tt) finished"
     end
     fieldsummary(chunk, set, true)
 end

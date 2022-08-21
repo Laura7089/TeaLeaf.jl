@@ -2,7 +2,6 @@ module CG
 
 using TeaLeaf
 using TeaLeaf.Kernels
-using LinearAlgebra: norm
 
 # Performs a full solve with the CG solver kernels
 function solve!(chunk::C, set::Settings, rx::Float64, ry::Float64)::Float64 where {C<:Chunk}
@@ -36,21 +35,16 @@ function solve!(chunk::C, set::Settings, rx::Float64, ry::Float64)::Float64 wher
 end
 
 # Invokes the main CG solve kernels
-function mainstep!(
-    chunk::C,
-    settings::Settings,
-    tt::Int,
-    rro::Float64,
-)::Float64 where {C<:Chunk}
-    pw = w!(chunk, settings.halodepth)
+function mainstep!(chunk::C, set::Settings, tt::Int, rro::Float64)::Float64 where {C<:Chunk}
+    pw = w!(chunk, set.halodepth)
 
     α = rro / pw
     chunk.cgα[tt] = α
-    rrn = ur!(chunk, settings.halodepth, α)
+    rrn = ur!(chunk, set.halodepth, α)
 
     β = rrn / rro
     chunk.cgβ[tt] = β
-    p!(chunk, settings.halodepth, β)
+    p!(chunk, set.halodepth, β)
 
     return rrn
 end
@@ -69,12 +63,11 @@ function init!(
     chunk.p .= 0.0
     chunk.r .= 0.0
 
-    x, y = size(chunk)
-
     modifier = coefficient == CONDUCTIVITY ? 1 : -1
-    H = halo(chunk, 1)
+    H = halo(chunk, 1) # Note hardcoded 1
     @. chunk.w[H] = chunk.density[H]^modifier
 
+    x, y = size(chunk)
     for jj = hd+1:y-1, kk = hd+1:x-1
         chunk.kx[kk, jj] =
             rx * (chunk.w[kk-1, jj] + chunk.w[kk, jj]) /
@@ -84,32 +77,40 @@ function init!(
             (2chunk.w[kk, jj-1] * chunk.w[kk, jj])
     end
 
-    H = halo(chunk, hd)
-    chunk.w[H] .= smvp.(chunk, Ref(chunk.u), H)
-    chunk.r[H] .= chunk.u[H] .- chunk.w[H]
-    chunk.p[H] .= chunk.r[H]
-    return sum(chunk.r[H] .* chunk.p[H])
+    temp = 0
+    xs, ys = haloa(chunk, hd)
+    for jj in ys, kk in xs
+        chunk.w[kk, jj] = smvp(chunk, chunk.u, CartesianIndex(kk, jj))
+        chunk.r[kk, jj] = chunk.u[kk, jj] - chunk.w[kk, jj]
+        chunk.p[kk, jj] = chunk.r[kk, jj]
+        temp += chunk.r[kk, jj]^2
+    end
+    return temp
 end
 
 # Calculates w
 function w!(chunk::C, hd::Int) where {C<:Chunk}
-    H = halo(chunk, hd)
-    chunk.w[H] .= smvp.(chunk, Ref(chunk.p), H)
-    return sum(chunk.w[H] .* chunk.p[H])
+    temp = 0
+    xs, ys = haloa(chunk, hd)
+    for jj in ys, kk in xs
+        chunk.w[kk, jj] = smvp(chunk, chunk.p, CartesianIndex(kk, jj))
+        temp += chunk.w[kk, jj] * chunk.p[kk, jj]
+    end
+    return temp
 end
 
 # Calculates u and r
-function ur!(chunk::C, hd::Int, alpha::Float64) where {C<:Chunk}
+function ur!(chunk::C, hd::Int, α::Float64) where {C<:Chunk}
     H = halo(chunk, hd)
-    @. chunk.u[H] += alpha * chunk.p[H]
-    @. chunk.r[H] -= alpha * chunk.w[H]
-    return norm(chunk.r[H])
+    @. chunk.u[H] += α * chunk.p[H]
+    @. chunk.r[H] -= α * chunk.w[H]
+    return sum(x -> x^2, chunk.r)
 end
 
 # Calculates p
-function p!(chunk::C, hd::Int, beta::Float64) where {C<:Chunk}
+function p!(chunk::C, hd::Int, β::Float64) where {C<:Chunk}
     H = halo(chunk, hd)
-    @. chunk.p[H] = beta * chunk.p[H] + chunk.r[H]
+    @. chunk.p[H] = β * chunk.p[H] + chunk.r[H]
 end
 
 end

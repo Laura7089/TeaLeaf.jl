@@ -11,10 +11,12 @@ end
 
 # The PPCG inner iteration
 function inneriteration!(chunk::Chunk, hd::Int, alpha::Float64, beta::Float64)
-    H = halo(chunk, hd)
-    chunk.r[H] .-= smvp.(chunk, Ref(chunk.sd), H)
-    chunk.u[H] .+= chunk.sd[H]
-    @. chunk.sd[H] = alpha * chunk.sd[H] + beta * chunk.r[H]
+    xs, ys = haloa(chunk, hd)
+    for jj in ys, kk in xs
+        chunk.r[kk, jj] -= smvp(chunk, chunk.sd, CartesianIndex(kk, jj))
+        chunk.u[kk, jj] += chunk.sd[kk, jj]
+        chunk.sd[kk, jj] = alpha * chunk.sd[kk, jj] + beta * chunk.r[kk, jj]
+    end
 end
 
 end

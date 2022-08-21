@@ -3,7 +3,6 @@ module Kernels
 using TeaLeaf
 using Match
 using ExportAll
-using LinearAlgebra: norm
 
 const ERROR_START = 1e+10
 const ERROR_SWITCH_MAX = 1.0
@@ -40,7 +39,7 @@ function solvefinished!(chunk::C, set::Settings) where {C<:Chunk}
 
     if set.checkresult
         residual!(chunk, set.halodepth)
-        exact_error += norm(chunk.r[halo(chunk, set.halodepth)])
+        exact_error += sum(x -> x^2, (chunk.r[halo(chunk, set.halodepth)]))
     end
 
     finalise!(chunk, set.halodepth)
@@ -50,7 +49,6 @@ end
 
 # Sparse Matrix Vector Product
 # TODO: what the hell is this trying to do???
-# TODO: do all the broadcast operations on this change the result due to ordering?
 function smvp(
     chunk::C,
     a::AbstractMatrix{Float64},
@@ -100,8 +98,10 @@ end
 
 # Calculates the current value of r
 function residual!(chunk::Chunk, hd::Int)
-    H = halo(chunk, hd)
-    chunk.r[H] .= chunk.u0[H] - smvp.(chunk, Ref(chunk.u), H)
+    xs, ys = haloa(chunk, hd)
+    for jj in ys, kk in xs
+        chunk.r[kk, jj] = chunk.u0[kk, jj] - smvp(chunk, chunk.u, CartesianIndex(kk, jj))
+    end
 end
 
 # Finalises the solution

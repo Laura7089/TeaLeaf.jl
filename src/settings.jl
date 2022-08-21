@@ -78,15 +78,15 @@ function readconfig!(settings::Settings, infile)
             # TODO: rename all the fields that don't match?
             # Read all of the settings from the config
             key, val = split(line, "=")
-            @match key begin
+            @match strip(key) begin
                 "initial_timestep" => (settings.dtinit = parse(Float64, val))
                 # Use other keys as direct field names
-                _ => try
-                    key = Symbol(key)
+                k => try
+                    key = Symbol(k)
                     val = parse(fieldtype(Settings, key), val)
                     setfield!(settings, key, val)
                 catch
-                    @warn "Unknown setting" line
+                    @warn "Unknown setting" line key
                 end
             end
         end

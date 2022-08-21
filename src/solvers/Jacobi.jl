@@ -2,7 +2,6 @@ module Jacobi
 
 using TeaLeaf
 using TeaLeaf.Kernels
-using LinearAlgebra: norm
 
 # Performs a full solve with the Jacobi solver kernels
 function driver!(
@@ -23,7 +22,7 @@ function driver!(
             haloupdate!(chunk, settings, 1)
 
             residual!(chunk, settings.halodepth)
-            error += norm(chunk.r[halo(chunk, settings.halodepth)])
+            error += sum(x -> x^2, (chunk.r[halo(chunk, settings.halodepth)]))
         end
 
         haloupdate!(chunk, settings, 1)
