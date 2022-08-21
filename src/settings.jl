@@ -92,6 +92,9 @@ function readconfig!(settings::Settings, infile)
         end
     end
 
+    settings.dx = (settings.xmax - settings.xmin) / settings.xcells
+    settings.dy = (settings.ymax - settings.ymin) / settings.ycells
+
     @info "Solution Parameters" settings
 end
 
