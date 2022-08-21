@@ -28,6 +28,7 @@ end
 function main()
     settings = Settings()
     chunk = initialiseapp!(settings)
+    @info "Solution Parameters" settings
     diffuse!(chunk, settings)
 end
 

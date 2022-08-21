@@ -1,5 +1,6 @@
 #!/usr/bin/env -S just --justfile
 set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
+set positional-arguments
 
 SRC_PATH := "src"
 export JULIA_MPI_BINARY := "system"
@@ -17,8 +18,8 @@ debug:
 alias d := debug
 
 # Run TeaLeaf.jl's default entrypoint
-run: # No compile dep since julia handles that for us
-    {{ JULIA }} --project -e 'using TeaLeaf; main()'
+run *args="": # No compile dep since julia handles that for us
+    {{ JULIA }} --project -e 'using TeaLeaf; main()' -- {{ args }}
 alias r := run
 
 # Run JuliaFormatter on the project, or a path

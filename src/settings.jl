@@ -95,7 +95,6 @@ function readconfig!(settings::Settings, infile)
     settings.dx = (settings.xmax - settings.xmin) / settings.xcells
     settings.dy = (settings.ymax - settings.ymin) / settings.ycells
 
-    @info "Solution Parameters" settings
 end
 
 function readstates(settings::Settings, infile = "tea.in")::Vector{State}
@@ -116,9 +115,6 @@ function readstates(settings::Settings, infile = "tea.in")::Vector{State}
         end
     end
 
-    for (ss, state) in enumerate(states)
-        @debug "State $(ss)" state.density state.energy state.xmin state.ymin state.x_max state.ymax state.radius state.geometry
-    end
     return states
 end
 
@@ -163,7 +159,7 @@ function parseflags!(settings::Settings)
     @add_arg_table s begin
         "--solver", "-s"
         help = "Can be 'cg', 'cheby', 'ppcg', or 'jacobi'"
-        arg_type = Module
+        arg_type = String
         "-x"
         arg_type = Int
         "-y"
