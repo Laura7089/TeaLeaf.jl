@@ -83,15 +83,13 @@ Base.axes(c::Chunk) = axes(c.density0)
 haloa(c::Chunk, hd::Int) = Tuple(ax[begin+hd:end-hd] for ax in axes(c))
 halo(c::Chunk, hd::Int) = CartesianIndices(haloa(c, hd))
 
-function set_chunk_data!(settings::Settings, chunk::Chunk)
-    xmin = settings.xmin + settings.dx
-    ymin = settings.ymin + settings.dy
+function setchunkdata!(settings::Settings, chunk::Chunk)
     xₛ, yₛ = size(chunk)
 
     xᵢ = 1:xₛ+1
-    @. chunk.vertexx[xᵢ] = xmin + settings.dx * (xᵢ - settings.halodepth - 1)
+    @. chunk.vertexx[xᵢ] = settings.xmin + settings.dx * (xᵢ - settings.halodepth - 1)
     yᵢ = 1:yₛ+1
-    @. chunk.vertexy[yᵢ] = ymin + settings.dy * (yᵢ - settings.halodepth - 1)
+    @. chunk.vertexy[yᵢ] = settings.ymin + settings.dy * (yᵢ - settings.halodepth - 1)
 
     xᵢ, yᵢ = axes(chunk)
     @. chunk.cellx = 0.5(chunk.vertexx[xᵢ] + chunk.vertexx[xᵢ+1])
@@ -102,7 +100,7 @@ function set_chunk_data!(settings::Settings, chunk::Chunk)
     chunk.yarea .= settings.dx
 end
 
-function set_chunk_state!(chunk::Chunk, states::Vector{State})
+function setchunkstate!(chunk::Chunk, states::Vector{State})
     # Set the initial state
     chunk.energy0 .= states[1].energy
     chunk.density .= states[1].density

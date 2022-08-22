@@ -48,8 +48,8 @@ function initialiseapp!(
     states = readstates(settings)
 
     chunk = Chunk(settings)
-    set_chunk_data!(settings, chunk)
-    set_chunk_state!(chunk, states)
+    setchunkdata!(settings, chunk)
+    setchunkstate!(chunk, states)
 
     # Prime the initial halo data
     # settings.toexchange .= false
