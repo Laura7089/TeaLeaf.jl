@@ -28,7 +28,7 @@ end
     presteps::Int = 30
     maxiters::Int = 10_000
     coefficient::Int = CONDUCTIVITY
-    ppcg_inner_steps::Int = 10
+    ppcginnersteps::Int = 10
     summaryfrequency::Int = 10
     halodepth::Int = 2
     # Fields to exchange

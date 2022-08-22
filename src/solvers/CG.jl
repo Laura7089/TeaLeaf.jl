@@ -89,7 +89,7 @@ function init!(
 end
 
 # Calculates w
-function w!(chunk::C, hd::Int) where {C<:Chunk}
+function w!(chunk::C, hd::Int)::Float64 where {C<:Chunk}
     temp = 0
     xs, ys = haloa(chunk, hd)
     for jj in ys, kk in xs

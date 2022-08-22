@@ -7,6 +7,107 @@ using ExportAll
 const ERROR_START = 1e+10
 const ERROR_SWITCH_MAX = 1.0
 
+# Calculates the eigenvalues from cg_alphas and cg_betas
+function eigenvalues!(chunk::C, settings::Settings, cgiters::Int) where {C<:Chunk}
+    diag = zeros(cgiters)
+    offdiag = zeros(cgiters)
+
+    # Prepare matrix
+    for ii = 1:cgiters
+        diag[ii] = 1.0 / chunk.cgα[ii]
+
+        if ii > 1
+            diag[ii] += chunk.cgβ[ii-1] / chunk.cgα[ii-1]
+        end
+        if ii < cgiters - 1
+            offdiag[ii+1] = sqrt(chunk.cgβ[ii]) / chunk.cgα[ii]
+        end
+    end
+    @debug "" diag offdiag
+
+    # Calculate the eigenvalues (ignore eigenvectors)
+    tqli!(diag, offdiag, cgiters)
+
+    chunk.eigmin = typemax(Float64)
+    chunk.eigmax = typemin(Float64)
+
+    # Get minimum and maximum eigenvalues
+    for ii = 1:cgiters
+        chunk.eigmin = min(chunk.eigmin, diag[ii])
+        chunk.eigmax = max(chunk.eigmax, diag[ii])
+    end
+
+    @assert !(0 in (chunk.eigmin, chunk.eigmax))
+
+    # TODO: Find out the reasoning behind this!?
+    # Adds some buffer for precision maybe?
+    chunk.eigmin *= 0.95
+    chunk.eigmax *= 1.05
+
+    @info "Eigenvalues calculated" chunk.eigmin chunk.eigmax
+end
+
+# TODO: can we replace with inbuilt julia stuff?
+# Adapted from
+# http://ftp.cs.stanford.edu/cs/robotics/scohen/nr/tqli.c
+function tqli!(d::Vector{Float64}, e::Vector{Float64}, n::Int)
+    s = r = p = g = f = dd = c = b = 0.0
+
+    e[1:n-1] .= e[2:n]
+    e[n] = 0.0
+
+    for l = 1:n-1
+        iter = 0
+        while true
+            m = l
+            for mᵢ = l:n-2
+                m = mᵢ
+                dd = abs(d[mᵢ]) + abs(d[mᵢ+1])
+                if e[mᵢ] == 0
+                    break
+                end
+            end
+            if m == l
+                break
+            end
+
+            iter += 1
+            @assert iter != 30
+
+            g = (d[l+1] - d[l]) / (2e[l])
+            r = sqrt((g * g) + 1)
+            g = d[m] - d[l] + e[l] / (g + (r * sign(g)))
+            s = c = 1
+            p = 0
+            # TODO reverse iteration
+            for i = m-1:l
+                f = s * e[i]
+                b = c * e[i]
+                r = sqrt(f * f + g * g)
+                e[i+1] = r
+                if r == 0.0
+                    d[i+1] -= p
+                    e[m] = 0.0
+                    continue
+                end
+                s = f / r
+                c = g / r
+                g = d[i+1] - p
+                r = (d[i] - g) * s + 2.0 * c * b
+                p = s * r
+                d[i+1] = g + p
+                g = c * r - b
+            end
+            d[l] = d[l] - p
+            e[l] = g
+            e[m] = 0.0
+            if m != l
+                break
+            end
+        end
+    end
+end
+
 function fieldsummary(chunk::C, set::Settings, solvefin::Bool) where {C<:Chunk}
     H = halo(chunk, set.halodepth)
     temp = sum(chunk.volume[H] .* chunk.density[H] .* chunk.u[H])
