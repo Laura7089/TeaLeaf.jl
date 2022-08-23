@@ -4,7 +4,7 @@ using TeaLeaf
 using TeaLeaf.Kernels
 
 # Performs a full solve with the CG solver kernels
-function solve!(chunk::C, set::Settings, rx::Float64, ry::Float64)::Float64 where {C<:Chunk}
+function solve!(chunk::Chunk, set::Settings, rx::Float64, ry::Float64)::Float64
     # Perform CG initialisation
     rro = init!(chunk, set.halodepth, set.coefficient, rx, ry)
 
@@ -35,7 +35,7 @@ function solve!(chunk::C, set::Settings, rx::Float64, ry::Float64)::Float64 wher
 end
 
 # Invokes the main CG solve kernels
-function mainstep!(chunk::C, set::Settings, tt::Int, rro::Float64)::Float64 where {C<:Chunk}
+function mainstep!(chunk::Chunk, set::Settings, tt::Int, rro::Float64)::Float64
     pw = w!(chunk, set.halodepth)
 
     α = rro / pw
@@ -50,20 +50,14 @@ function mainstep!(chunk::C, set::Settings, tt::Int, rro::Float64)::Float64 wher
 end
 
 # Initialises the CG solver
-function init!(
-    chunk::C,
-    hd::Int,
-    coefficient::Int,
-    rx::Float64,
-    ry::Float64,
-) where {C<:Chunk}
-    @assert coefficient in (CONDUCTIVITY, RECIP_CONDUCTIVITY)
+function init!(chunk::Chunk, hd::Int, coef::Int, rx::Float64, ry::Float64)
+    @assert coef in (CONDUCTIVITY, RECIP_CONDUCTIVITY)
 
     @. chunk.u = chunk.energy * chunk.density
     chunk.p .= 0.0
     chunk.r .= 0.0
 
-    modifier = coefficient == CONDUCTIVITY ? 1 : -1
+    modifier = coef == CONDUCTIVITY ? 1 : -1
     H = halo(chunk, 1) # Note hardcoded 1
     @. chunk.w[H] = chunk.density[H]^modifier
 
@@ -89,7 +83,7 @@ function init!(
 end
 
 # Calculates w
-function w!(chunk::C, hd::Int)::Float64 where {C<:Chunk}
+function w!(chunk::Chunk, hd::Int)::Float64
     temp = 0
     xs, ys = haloa(chunk, hd)
     for jj in ys, kk in xs
@@ -100,7 +94,7 @@ function w!(chunk::C, hd::Int)::Float64 where {C<:Chunk}
 end
 
 # Calculates u and r
-function ur!(chunk::C, hd::Int, α::Float64) where {C<:Chunk}
+function ur!(chunk::Chunk, hd::Int, α::Float64)
     H = halo(chunk, hd)
     @. chunk.u[H] += α * chunk.p[H]
     @. chunk.r[H] -= α * chunk.w[H]
@@ -108,7 +102,7 @@ function ur!(chunk::C, hd::Int, α::Float64) where {C<:Chunk}
 end
 
 # Calculates p
-function p!(chunk::C, hd::Int, β::Float64) where {C<:Chunk}
+function p!(chunk::Chunk, hd::Int, β::Float64)
     H = halo(chunk, hd)
     @. chunk.p[H] = β * chunk.p[H] + chunk.r[H]
 end

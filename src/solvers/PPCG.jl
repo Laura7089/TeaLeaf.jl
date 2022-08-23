@@ -7,13 +7,7 @@ import ..CG
 import ..Cheby
 
 # Performs a full solve with the PPCG solver
-function solve!(
-    chunk::C,
-    settings::Settings,
-    rx::Float64,
-    ry::Float64,
-    error::Float64,
-) where {C<:Chunk}
+function solve!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64, error::Float64)
     ppcgiters = 0
 
     # Perform CG initialisation
@@ -60,7 +54,7 @@ function solve!(
 end
 
 # Invokes the PPCG initialisation kernels
-function init!(chunk::C, settings::Settings) where {C<:Chunk}
+function init!(chunk::Chunk, settings::Settings)
     residual!(chunk, settings.halodepth)
 
     resettoexhange!(settings)
@@ -69,12 +63,7 @@ function init!(chunk::C, settings::Settings) where {C<:Chunk}
 end
 
 # Invokes the main PPCG solver kernels
-function mainstep!(
-    chunk::C,
-    settings::Settings,
-    rro::Float64,
-    error::Float64,
-)::Float64 where {C<:Chunk}
+function mainstep!(chunk::Chunk, settings::Settings, rro::Float64, error::Float64)::Float64
     pw = CG.w!(chunk, settings.halodepth)
     α = rro / pw
     rrn = CG.ur!(chunk, settings.halodepth, α)

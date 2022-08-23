@@ -5,7 +5,7 @@ using TeaLeaf.Kernels
 import ..CG
 
 # Performs full solve with the Chebyshev kernels
-function solve!(chunk::C, settings::Settings, rx::Float64, ry::Float64) where {C<:Chunk}
+function solve!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64)
     error = ERROR_START
     rro = 0
     estiter = 0
@@ -62,7 +62,7 @@ function solve!(chunk::C, settings::Settings, rx::Float64, ry::Float64) where {C
 end
 
 # Invokes the Chebyshev initialisation kernels
-function init!(chunk::C, settings::Settings, cgiters::Int)::Float64 where {C<:Chunk}
+function init!(chunk::Chunk, settings::Settings, cgiters::Int)::Float64
     # Initialise eigenvalues and Chebyshev coefficients
     eigenvalues!(chunk, settings, cgiters)
     coef!(chunk, settings, settings.maxiters - cgiters)
@@ -85,12 +85,12 @@ end
 
 # Performs the main iteration step
 function mainstep!(
-    chunk::C,
+    chunk::Chunk,
     settings::Settings,
     chebyiters::Int,
     calc2norm::Bool,
     error::Float64,
-)::Float64 where {C<:Chunk}
+)::Float64
     xs, ys = haloa(chunk, settings.halodepth)
     for jj in ys, kk in xs
         chunk.w[kk, jj] = smvp(chunk, chunk.u, CartesianIndex(kk, jj))
@@ -109,7 +109,7 @@ function mainstep!(
 end
 
 # Calculates the estimated iterations for Chebyshev solver
-function calciter(chunk::C, error::Float64, bb::Float64)::Int where {C<:Chunk}
+function calciter(chunk::Chunk, error::Float64, bb::Float64)::Int
     connum = chunk.eigmax / chunk.eigmin
 
     # Calculate estimated iteration count
@@ -121,7 +121,7 @@ function calciter(chunk::C, error::Float64, bb::Float64)::Int where {C<:Chunk}
 end
 
 # Calculates the Chebyshev coefficients for the chunk
-function coef!(chunk::C, settings::Settings, maxiters::Int) where {C<:Chunk}
+function coef!(chunk::Chunk, settings::Settings, maxiters::Int)
     chunk.θ = (chunk.eigmax + chunk.eigmin) / 2
     δ = (chunk.eigmax - chunk.eigmin) / 2
     σ = chunk.θ / δ

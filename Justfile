@@ -3,6 +3,7 @@ set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 set positional-arguments
 
 SRC_PATH := "src"
+RUN_FILE := "./run.jl"
 export JULIA_MPI_BINARY := "system"
 JULIA := "julia +1.7"
 
@@ -13,13 +14,16 @@ alias i := interactive
 
 # Get an interactive debugger
 debug:
+    @# We disable logging because Debugger.jl doesn't work with it at
+    @# the time of writing.
+    @# See https://github.com/JuliaDebug/Debugger.jl/issues/318
     {{ JULIA }} --project -ie 'using Debugger, Logging, TeaLeaf; \
         disable_logging(Logging.Error)'
 alias d := debug
 
 # Run TeaLeaf.jl's default entrypoint
 run *args="": # No compile dep since julia handles that for us
-    {{ JULIA }} --project -e 'using TeaLeaf; main()' -- {{ args }}
+    {{ JULIA }} --project "{{ RUN_FILE }}" -- {{ args }}
 alias r := run
 
 # Run JuliaFormatter on the project, or a path

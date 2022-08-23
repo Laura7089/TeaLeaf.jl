@@ -1,5 +1,5 @@
 module TeaLeaf
-export main, initialiseapp!, diffuse!
+export initialiseapp!, diffuse!
 
 using Match
 using ArgParse
@@ -23,13 +23,6 @@ using TeaLeaf.Kernels
 # Global constants
 @consts begin
     CG_ITERS_FOR_EIGENVALUES = 20 # TODO: still needed?
-end
-
-function main()
-    settings = Settings()
-    chunk = initialiseapp!(settings)
-    @info "Solution Parameters" settings
-    diffuse!(chunk, settings)
 end
 
 function initialiseapp!(
@@ -66,7 +59,7 @@ function initialiseapp!(
 end
 
 # The main timestep loop
-function diffuse!(chunk::C, set::Settings) where {C<:Chunk}
+function diffuse!(chunk::Chunk, set::Settings)
     if set.debugfile != "" && isfile(set.debugfile)
         rm(set.debugfile)
     end
@@ -98,7 +91,7 @@ function diffuse!(chunk::C, set::Settings) where {C<:Chunk}
     fieldsummary(chunk, set)
 end
 
-function debugrecord(settings::Settings, chunk::C) where {C<:Chunk}
+function debugrecord(settings::Settings, chunk::Chunk)
     if settings.debugfile == ""
         return
     end

@@ -8,7 +8,7 @@ const ERROR_START = 1e+10
 const ERROR_SWITCH_MAX = 1.0
 
 # Calculates the eigenvalues from cg_alphas and cg_betas
-function eigenvalues!(chunk::C, settings::Settings, cgiters::Int) where {C<:Chunk}
+function eigenvalues!(chunk::Chunk, settings::Settings, cgiters::Int)
     diag = zeros(cgiters)
     offdiag = zeros(cgiters)
 
@@ -108,7 +108,7 @@ function tqli!(d::Vector{Float64}, e::Vector{Float64}, n::Int)
     end
 end
 
-function fieldsummary(chunk::C, set::Settings) where {C<:Chunk}
+function fieldsummary(chunk::Chunk, set::Settings)
     if !set.checkresult
         return
     end
@@ -127,14 +127,14 @@ function fieldsummary(chunk::C, set::Settings) where {C<:Chunk}
 end
 
 # Invoke the halo update kernels
-function haloupdate!(chunk::C, set::Settings, depth::Int) where {C<:Chunk}
+function haloupdate!(chunk::Chunk, set::Settings, depth::Int)
     toexchange = filter(f -> set.toexchange[f], CHUNK_EXCHANGE_FIELDS)
     # Call `updateface` on all faces which are marked in `toexchange`
     updateface!.(chunk, set.halodepth, depth, getfield.(chunk, toexchange))
 end
 
 # Calls all kernels that wrap up a solve regardless of solver
-function solvefinished!(chunk::C, set::Settings) where {C<:Chunk}
+function solvefinished!(chunk::Chunk, set::Settings)
     if set.checkresult
         residual!(chunk, set.halodepth)
     end
@@ -146,11 +146,7 @@ end
 
 # Sparse Matrix Vector Product
 # TODO: what the hell is this trying to do???
-function smvp(
-    chunk::C,
-    a::AbstractMatrix{Float64},
-    index::CartesianIndex,
-)::Float64 where {C<:Chunk}
+function smvp(chunk::Chunk, a::AbstractMatrix{Float64}, index::CartesianIndex)::Float64
     x, y = Tuple(index)
     consum = sum((1, chunk.kx[x+1, y], chunk.kx[x, y], chunk.ky[x, y+1], chunk.ky[x, y]))
     return consum * a[x, y]
@@ -159,12 +155,7 @@ function smvp(
 end
 
 # Updates faces in turn.
-function updateface!(
-    chunk::C,
-    hd::Int,
-    depth::Int,
-    buffer::B,
-) where {C<:Chunk,B<:AbstractMatrix{Float64}}
+function updateface!(chunk::Chunk, hd::Int, depth::Int, buffer::AbstractMatrix{Float64})
     x, y = size(chunk)
     xs, ys = haloa(chunk, hd)
     # Update left halo.

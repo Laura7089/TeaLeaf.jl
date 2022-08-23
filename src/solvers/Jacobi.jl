@@ -4,12 +4,7 @@ using TeaLeaf
 using TeaLeaf.Kernels
 
 # Performs a full solve with the Jacobi solver kernels
-function driver!(
-    chunk::C,
-    settings::Settings,
-    rx::Float64,
-    ry::Float64,
-)::Float64 where {C<:Chunk}
+function driver!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64)::Float64
     init!(chunk, settings, rx, ry)
     final_time = 0
     error = ERROR_START
@@ -37,7 +32,7 @@ function driver!(
     return error
 end
 
-function init!(chunk::C, set::Settings, rx::Float64, ry::Float64) where {C<:Chunk}
+function init!(chunk::Chunk, set::Settings, rx::Float64, ry::Float64)
     if set.coefficient < min(CONDUCTIVITY, RECIP_CONDUCTIVITY)
         throw("Coefficient $(set.coefficient) is not valid.")
     end
