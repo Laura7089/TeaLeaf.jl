@@ -2,6 +2,7 @@ export Settings
 export CONDUCTIVITY, RECIP_CONDUCTIVITY
 export checkingvalue
 export resettoexchange!
+export debugrecord
 
 # The accepted types of state geometry
 @enum Geometry Rectangular Circular Point
@@ -31,14 +32,13 @@ end
     ppcginnersteps::Int = 10
     summaryfrequency::Int = 10
     halodepth::Int = 2
-    # Fields to exchange
-    toexchange::Dict{Symbol,Bool} = Dict(zip(CHUNK_FIELDS, fill(false, 6)))
 
-    is_offload::Bool = false
+    # Fields to exchange
+    toexchange::Dict{Symbol,Bool} =
+        Dict(zip(CHUNK_EXCHANGE_FIELDS, fill(false, length(CHUNK_EXCHANGE_FIELDS))))
 
     errorswitch::Bool = false
     checkresult::Bool = true
-    preconditioner::Bool = false
 
     eps::Float64 = 1e-15
     dtinit::Float64 = 0.1
@@ -58,9 +58,11 @@ end
 
     dx::Float64 = (xmax - xmin) / xcells
     dy::Float64 = (ymax - ymin) / ycells
+
+    debugfile::String = ""
 end
 Broadcast.broadcastable(s::Settings) = Ref(s)
-resettoexchange!(s::Settings) = setindex!.(Ref(s.toexchange), false, CHUNK_FIELDS)
+resettoexchange!(s::Settings) = setindex!.(Ref(s.toexchange), false, CHUNK_EXCHANGE_FIELDS)
 
 function readconfig!(settings::Settings, infile)
     # Open the configuration file
@@ -68,33 +70,27 @@ function readconfig!(settings::Settings, infile)
     open(infile, read = true) do tea_in
         while !eof(tea_in)
             line = readline(tea_in)
-            @debug "Config line:" line
 
             # TODO: get test problems here too?
-            if startswith(line, "state") || startswith(line, "*") || !occursin("=", line)
+            if any(startswith.(Ref(line), ("state", "*"))) || !occursin("=", line)
                 continue
             end
 
             # Read all of the settings from the config
             key, val = split(line, "=")
-            key = strip(replace(key, "_" => ""))
-            @match key begin
-                "initialtimestep" => (settings.dtinit = parse(Float64, val))
-                # Use other keys as direct field names
-                k => try
-                    key = Symbol(k)
-                    val = parse(fieldtype(Settings, key), val)
-                    setfield!(settings, key, val)
-                catch
-                    @warn "Unknown setting" line key
-                end
+            key = Symbol(strip(replace(key, "_" => "")))
+            key = key == :initialtimestep ? :dtinit : key
+            try
+                val = parse(fieldtype(Settings, key), val)
+                setfield!(settings, key, val)
+            catch
+                @warn "Unknown setting" line key
             end
         end
     end
 
     settings.dx = (settings.xmax - settings.xmin) / settings.xcells
     settings.dy = (settings.ymax - settings.ymin) / settings.ycells
-
 end
 
 function readstates(settings::Settings, infile = "tea.in")::Vector{State}

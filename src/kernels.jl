@@ -108,39 +108,35 @@ function tqli!(d::Vector{Float64}, e::Vector{Float64}, n::Int)
     end
 end
 
-function fieldsummary(chunk::C, set::Settings, solvefin::Bool) where {C<:Chunk}
+function fieldsummary(chunk::C, set::Settings) where {C<:Chunk}
+    if !set.checkresult
+        return
+    end
+
     H = halo(chunk, set.halodepth)
-    temp = sum(chunk.volume[H] .* chunk.density[H] .* chunk.u[H])
+    actual = sum(chunk.volume[H] .* chunk.density[H] .* chunk.u[H])
+    cv = checkingvalue(set)
+    @info "Checking results..." cv actual
 
-    if set.checkresult && solvefin
-        @info "Checking results..."
-        cv = checkingvalue(set)
-        @info "Expected and actual:" cv temp
-
-        qa_diff = abs(100temp / cv - 100.0)
-        if qa_diff < 0.001
-            @info "This run PASSED" qa_diff
-        else
-            @warn "This run FAILED" qa_diff
-        end
+    qa_diff = abs(100actual / cv - 100.0)
+    if qa_diff < 0.001
+        @info "This run PASSED" qa_diff
+    else
+        @warn "This run FAILED" qa_diff
     end
 end
 
 # Invoke the halo update kernels
 function haloupdate!(chunk::C, set::Settings, depth::Int) where {C<:Chunk}
-    toexchange = filter(f -> set.toexchange[f], CHUNK_FIELDS)
+    toexchange = filter(f -> set.toexchange[f], CHUNK_EXCHANGE_FIELDS)
     # Call `updateface` on all faces which are marked in `toexchange`
     updateface!.(chunk, set.halodepth, depth, getfield.(chunk, toexchange))
 end
 
 # Calls all kernels that wrap up a solve regardless of solver
 function solvefinished!(chunk::C, set::Settings) where {C<:Chunk}
-    # TODO this doesn't seem to do anything
-    exact_error = 0.0
-
     if set.checkresult
         residual!(chunk, set.halodepth)
-        exact_error += sum(x -> x^2, (chunk.r[halo(chunk, set.halodepth)]))
     end
 
     finalise!(chunk, set.halodepth)
@@ -173,8 +169,7 @@ function updateface!(
     xs, ys = haloa(chunk, hd)
     # Update left halo.
     for kk = 1:depth
-        # TODO: is the +1 right?
-        buffer[hd-kk+1, ys] .= buffer[hd+kk, ys]
+        buffer[hd-kk, ys] .= buffer[hd+kk, ys]
     end
     # Update right halo.
     for kk = 1:depth
@@ -186,8 +181,7 @@ function updateface!(
     end
     # Updates bottom halo.
     for jj = 1:depth
-        # TODO: is the +1 right?
-        buffer[xs, hd-jj+1] .= buffer[xs, hd+jj]
+        buffer[xs, hd-jj] .= buffer[xs, hd+jj]
     end
 end
 

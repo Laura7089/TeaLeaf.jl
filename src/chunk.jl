@@ -1,17 +1,11 @@
 export Chunk
 export chunksize
-export CHUNK_FIELDS
+export CHUNK_EXCHANGE_FIELDS
 export halo, haloa
 
-@consts begin
-    CHUNK_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
-    NUM_FIELDS = 6
-end
+const CHUNK_EXCHANGE_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
 
 @with_kw mutable struct Chunk{T<:AbstractMatrix{Float64}}
-    # Solve-wide variables
-    dtinit::Float64
-
     # Field dimensions
     x::Int
     y::Int
@@ -68,7 +62,6 @@ function Chunk(settings::Settings)
         # Initialise the key variables
         x = chunkx,
         y = chunky,
-        dtinit = settings.dtinit,
 
         # Solver-specific
         cgα = zeros(settings.maxiters),

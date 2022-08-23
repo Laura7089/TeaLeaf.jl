@@ -1,5 +1,5 @@
 module TeaLeaf
-export main
+export main, initialiseapp!, diffuse!
 
 using Match
 using ArgParse
@@ -67,12 +67,14 @@ end
 
 # The main timestep loop
 function diffuse!(chunk::C, set::Settings) where {C<:Chunk}
-    for tt = 1:set.endstep
-        # Calculate minimum timestep information
-        dt = min(chunk.dtinit, set.dtinit)
+    if settings.debugfile != ""
+        rm(settings.debugfile)
+    end
 
-        rx = dt / set.dx^2
-        ry = dt / set.dy^2
+    for tt = 1:set.endstep
+        debugrecord(set, chunk)
+        rx = set.dtinit / set.dx^2
+        ry = set.dtinit / set.dy^2
 
         # Prepare halo regions for solve
         resettoexchange!(set)
@@ -88,12 +90,34 @@ function diffuse!(chunk::C, set::Settings) where {C<:Chunk}
         solvefinished!(chunk, set)
 
         if tt % set.summaryfrequency == 0
-            fieldsummary(chunk, set, false)
+            fieldsummary(chunk, set)
         end
 
         @info "Timestep $(tt) finished"
     end
-    fieldsummary(chunk, set, true)
+    fieldsummary(chunk, set)
 end
+
+function debugrecord(settings::Settings, chunk::C) where {C<:Chunk}
+    if settings.debugfile == ""
+        return
+    end
+
+    @info "Writing debug data to $(settings.debugfile)"
+    open(settings.debugfile, write = true, append = true) do debugfile
+        for attr in filter(f -> !(f in (:x, :y)), fieldnames(Chunk))
+            println(debugfile, String(attr))
+            println(debugfile, getstring(getfield(chunk, attr)))
+            println(debugfile, "")
+        end
+        println(debugfile, "")
+        println(debugfile, "")
+    end
+end
+
+function getstring(a::AbstractArray{T})::String where {T<:Number}
+    join(join.(eachcol(a), ' '), '\n')
+end
+getstring(f) = string(f)
 
 end
