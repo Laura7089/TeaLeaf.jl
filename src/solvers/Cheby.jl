@@ -4,6 +4,8 @@ using TeaLeaf
 using TeaLeaf.Kernels
 import ..CG
 
+const CGEIGENITERS = 20
+
 # Performs full solve with the Chebyshev kernels
 function solve!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64)
     error = ERROR_START
@@ -22,8 +24,7 @@ function solve!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64)
         # Perform enough iterations to converge eigenvalues
         switchcheby =
             chebyiters != 0 || (
-                settings.errorswitch ?
-                (error < settings.epslim) && (tt > CG_ITERS_FOR_EIGENVALUES) :
+                settings.errorswitch ? (error < settings.epslim) && (tt > CGEIGENITERS) :
                 (tt > settings.presteps) && (error < ERROR_SWITCH_MAX)
             )
 

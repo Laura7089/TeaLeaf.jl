@@ -22,7 +22,7 @@ function solve!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64, erro
         switchppcg =
             ppcgiters != 0 || (
                 settings.error_switch ?
-                (error < settings.eps_lim) && (tt > CG_ITERS_FOR_EIGENVALUES) :
+                (error < settings.eps_lim) && (tt > Cheby.CGEIGENITERS) :
                 (tt > settings.presteps) && (error < ERROR_SWITCH_MAX)
             )
 

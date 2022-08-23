@@ -10,7 +10,7 @@ export debugrecord
 const CONDUCTIVITY = 1
 const RECIP_CONDUCTIVITY = 2
 
-# State list
+# TODO: can we make this immutable?
 @with_kw mutable struct State
     density::Float64 = 0.0
     energy::Float64 = 0.0
@@ -59,12 +59,15 @@ end
     dx::Float64 = (xmax - xmin) / xcells
     dy::Float64 = (ymax - ymin) / ycells
 
+    states::Vector{State} = []
+
     debugfile::String = ""
 end
 Broadcast.broadcastable(s::Settings) = Ref(s)
 resettoexchange!(s::Settings) = setindex!.(Ref(s.toexchange), false, CHUNK_EXCHANGE_FIELDS)
 
-function readconfig!(settings::Settings, infile)
+function Settings(infile)
+    settings = Settings()
     # Open the configuration file
     @info "Reading configuration from $(infile)"
     open(infile, read = true) do tea_in
@@ -72,7 +75,13 @@ function readconfig!(settings::Settings, infile)
             line = readline(tea_in)
 
             # TODO: get test problems here too?
-            if any(startswith.(Ref(line), ("state", "*"))) || !occursin("=", line)
+            if startswith(line, "state")
+                push!(settings.states, readstate(line, settings))
+                continue
+            end
+
+            # Skip comments and misunderstood lines
+            if startswith(line, "*") || !occursin("=", line)
                 continue
             end
 
@@ -91,27 +100,7 @@ function readconfig!(settings::Settings, infile)
 
     settings.dx = (settings.xmax - settings.xmin) / settings.xcells
     settings.dy = (settings.ymax - settings.ymin) / settings.ycells
-end
-
-function readstates(settings::Settings, infile = "tea.in")::Vector{State}
-    states = []
-    # Open the configuration file
-    @info "Reading state configuration from $(infile)"
-    open(infile, read = true) do tea_in
-        while !eof(tea_in)
-            line = readline(tea_in)
-            @debug "Config line:" line
-
-            # TODO: get test problems here too?
-            if !startswith(line, "state") || startswith(line, "*") || !occursin("=", line)
-                continue
-            end
-
-            push!(states, readstate(line, settings))
-        end
-    end
-
-    return states
+    return settings
 end
 
 function readstate(line, settings::Settings)::State
@@ -120,7 +109,7 @@ function readstate(line, settings::Settings)::State
     state_num = parse(Int, thesplit[2])
     state = State()
 
-    for pair in split(line, " ")[3:end]
+    for pair in thesplit[3:end]
         (key, val) = split(pair, "=")
 
         @match key begin
@@ -148,49 +137,9 @@ function readstate(line, settings::Settings)::State
     return state
 end
 
-function parseflags!(settings::Settings)
-    @info "Parsing flags..."
-    s = ArgParseSettings()
-
-    @add_arg_table s begin
-        "--solver", "-s"
-        help = "Can be 'cg', 'cheby', 'ppcg', or 'jacobi'"
-        arg_type = String
-        "-x"
-        help = "Number of x cells"
-        arg_type = Int
-        "-y"
-        help = "Number of y cells"
-        arg_type = Int
-        "-O", "--debug-out"
-        help = "File to print debug state to"
-        arg_type = String
-    end
-
-    args = parse_args(s)
-    if !isnothing(args["solver"])
-        @match lowercase(args["solver"]) begin
-            "jacobi" => (settings.solver = Jacobi)
-            "cg" => (settings.solver = CG)
-            "cheby" => (settings.solver = Cheby)
-            "ppcg" => (settings.solver = PPCG)
-        end
-    end
-    if !isnothing(args["x"])
-        settings.xcells = args["x"]
-    end
-    if !isnothing(args["y"])
-        settings.ycells = args["y"]
-    end
-    if !isnothing(args["debug-out"])
-        settings.debugfile = args["debug-out"]
-    end
-end
-
 # Fetches the checking value from the test problems file
 function checkingvalue(settings::Settings, problemfile = "tea.problems")::Float64
     open(problemfile, read = true) do file
-        # Get the number of states present in the config file
         while !eof(file)
             thesplit = split(readline(file), " ")
             params = parse.(Int64, thesplit[1:3])

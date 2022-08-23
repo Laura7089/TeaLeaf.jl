@@ -2,7 +2,6 @@ module TeaLeaf
 export initialiseapp!, diffuse!
 
 using Match
-using ArgParse
 using Parameters
 
 include("./settings.jl")
@@ -20,29 +19,10 @@ using TeaLeaf.Kernels
 # TODO: doc comments -> docstrings
 # TODO: fix naming convention
 
-# Global constants
-@consts begin
-    CG_ITERS_FOR_EIGENVALUES = 20 # TODO: still needed?
-end
-
-function initialiseapp!(
-    settings::Settings,
-    useconfig = true,
-    configfile = "tea.in",
-    useflags = true,
-)
-    if useconfig
-        readconfig!(settings, configfile)
-    end
-    if useflags
-        parseflags!(settings)
-    end
-
-    states = readstates(settings)
-
+function initialiseapp!(settings::Settings)
     chunk = Chunk(settings)
     setchunkdata!(settings, chunk)
-    setchunkstate!(chunk, states)
+    setchunkstate!(chunk, settings.states)
 
     # Prime the initial halo data
     # settings.toexchange .= false
