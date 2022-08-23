@@ -157,9 +157,14 @@ function parseflags!(settings::Settings)
         help = "Can be 'cg', 'cheby', 'ppcg', or 'jacobi'"
         arg_type = String
         "-x"
+        help = "Number of x cells"
         arg_type = Int
         "-y"
+        help = "Number of y cells"
         arg_type = Int
+        "-O", "--debug-out"
+        help = "File to print debug state to"
+        arg_type = String
     end
 
     args = parse_args(s)
@@ -176,6 +181,9 @@ function parseflags!(settings::Settings)
     end
     if !isnothing(args["y"])
         settings.ycells = args["y"]
+    end
+    if !isnothing(args["debug-out"])
+        settings.debugfile = args["debug-out"]
     end
 end
 

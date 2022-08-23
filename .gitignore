@@ -4,3 +4,4 @@ tea.problems
 **.in*
 src/ref
 *.mod
+out.txt

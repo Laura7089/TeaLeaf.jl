@@ -67,8 +67,8 @@ end
 
 # The main timestep loop
 function diffuse!(chunk::C, set::Settings) where {C<:Chunk}
-    if settings.debugfile != ""
-        rm(settings.debugfile)
+    if set.debugfile != "" && isfile(set.debugfile)
+        rm(set.debugfile)
     end
 
     for tt = 1:set.endstep
