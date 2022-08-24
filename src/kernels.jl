@@ -37,7 +37,9 @@ function eigenvalues!(chunk::Chunk, settings::Settings, cgiters::Int)
         chunk.eigmax = max(chunk.eigmax, diag[ii])
     end
 
-    @assert !(0 in (chunk.eigmin, chunk.eigmax))
+    if chunk.eigmin < 0 || chunk.eigmax < 0
+        throw("Negative eigenvalue found: ($(chunk.eigmin), $(chunk.eigmax))")
+    end
 
     # TODO: Find out the reasoning behind this!?
     # Adds some buffer for precision maybe?
@@ -72,7 +74,9 @@ function tqli!(d::Vector{Float64}, e::Vector{Float64}, n::Int)
             end
 
             iter += 1
-            @assert iter != 30
+            if iter == 30
+                throw("Too many iterations in TQLI routine")
+            end
 
             g = (d[l+1] - d[l]) / (2e[l])
             r = sqrt((g * g) + 1)

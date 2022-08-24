@@ -74,7 +74,6 @@ function Settings(infile)
         while !eof(tea_in)
             line = readline(tea_in)
 
-            # TODO: get test problems here too?
             if startswith(line, "state")
                 push!(settings.states, readstate(line, settings))
                 continue
@@ -84,6 +83,8 @@ function Settings(infile)
             if startswith(line, "*") || !occursin("=", line)
                 continue
             end
+
+            # TODO: respect the `use_[solver]` lines in the config
 
             # Read all of the settings from the config
             key, val = split(line, "=")

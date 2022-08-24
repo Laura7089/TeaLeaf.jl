@@ -3,7 +3,7 @@ set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 set positional-arguments
 
 SRC_PATH := "./src"
-RUN_FILE := "./TeaLeaf.jl"
+RUN_FILE := "./run.jl"
 export JULIA_MPI_BINARY := "system"
 JULIA := "julia +1.7"
 

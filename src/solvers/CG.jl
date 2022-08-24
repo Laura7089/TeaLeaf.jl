@@ -51,7 +51,9 @@ end
 
 # Initialises the CG solver
 function init!(chunk::Chunk, hd::Int, coef::Int, rx::Float64, ry::Float64)
-    @assert coef in (CONDUCTIVITY, RECIP_CONDUCTIVITY)
+    if !(coef in (CONDUCTIVITY, RECIP_CONDUCTIVITY))
+        throw("Coefficient $(coef) is not valid")
+    end
 
     @. chunk.u = chunk.energy * chunk.density
     chunk.p .= 0.0
