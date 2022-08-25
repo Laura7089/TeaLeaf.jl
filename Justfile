@@ -30,16 +30,3 @@ alias r := run
 format path=SRC_PATH:
     {{ JULIA }} -e 'using JuliaFormatter; format("{{ path }}")'
 alias f := format
-
-# Compile TeaLeaf.jl
-compile:
-    {{ JULIA }} --project -e 'import TeaLeaf'
-
-# Delete Julia TeaLeaf compilation cache
-decompile:
-    find ~/.julia/compiled -maxdepth 2 \
-        -iname "TeaLeaf" -type d -exec rm -rfv {} \;
-
-# Clean up run and build artefacts
-clean:
-    rm -fv *.tmp *.out
