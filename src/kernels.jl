@@ -9,17 +9,15 @@ const ERROR_SWITCH_MAX = 1.0
 
 # Calculates the eigenvalues from cg_alphas and cg_betas
 function eigenvalues!(chunk::Chunk, settings::Settings, cgiters::Int)
-    diag = zeros(cgiters)
+    diag = 1 ./ chunk.cgα[1:cgiters]
     offdiag = zeros(cgiters)
 
     # Prepare matrix
     for ii = 1:cgiters
-        diag[ii] = 1.0 / chunk.cgα[ii]
-
         if ii > 1
             diag[ii] += chunk.cgβ[ii-1] / chunk.cgα[ii-1]
         end
-        if ii < cgiters - 1
+        if ii < cgiters
             offdiag[ii+1] = sqrt(chunk.cgβ[ii]) / chunk.cgα[ii]
         end
     end
@@ -28,14 +26,9 @@ function eigenvalues!(chunk::Chunk, settings::Settings, cgiters::Int)
     # Calculate the eigenvalues (ignore eigenvectors)
     tqli!(diag, offdiag, cgiters)
 
-    chunk.eigmin = typemax(Float64)
-    chunk.eigmax = typemin(Float64)
+    # TODO: can we do minmax(eigvals(SymTridiagonal(diag, offdiag))) instead?
 
-    # Get minimum and maximum eigenvalues
-    for ii = 1:cgiters
-        chunk.eigmin = min(chunk.eigmin, diag[ii])
-        chunk.eigmax = max(chunk.eigmax, diag[ii])
-    end
+    chunk.eigmin, chunk.eigmax = minmax(diag)
 
     if chunk.eigmin < 0 || chunk.eigmax < 0
         throw("Negative eigenvalue found: ($(chunk.eigmin), $(chunk.eigmax))")
@@ -69,14 +62,10 @@ function tqli!(d::Vector{Float64}, e::Vector{Float64}, n::Int)
                     break
                 end
             end
-            if m == l
-                break
-            end
+            m == l && break
 
             iter += 1
-            if iter == 30
-                throw("Too many iterations in TQLI routine")
-            end
+            iter == 30 && throw("Too many iterations in TQLI routine")
 
             g = (d[l+1] - d[l]) / (2e[l])
             r = sqrt((g * g) + 1)
@@ -105,17 +94,13 @@ function tqli!(d::Vector{Float64}, e::Vector{Float64}, n::Int)
             d[l] = d[l] - p
             e[l] = g
             e[m] = 0.0
-            if m != l
-                break
-            end
+            m != l && break
         end
     end
 end
 
 function fieldsummary(chunk::Chunk, set::Settings)
-    if !set.checkresult
-        return
-    end
+    !set.checkresult && return
 
     H = halo(chunk, set.halodepth)
     actual = sum(chunk.volume[H] .* chunk.density[H] .* chunk.u[H])
@@ -130,22 +115,37 @@ function fieldsummary(chunk::Chunk, set::Settings)
     end
 end
 
-# Invoke the halo update kernels
-function haloupdate!(chunk::Chunk, set::Settings, depth::Int)
-    toexchange = filter(f -> set.toexchange[f], CHUNK_EXCHANGE_FIELDS)
-    # Call `updateface` on all faces which are marked in `toexchange`
-    updateface!.(chunk, set.halodepth, depth, getfield.(chunk, toexchange))
+"""
+    haloupdate!(chunk, set, depth[, toex][, reset])
+
+Invoke the halo update kernels.
+
+If `toex` is passed:
+1. update those fields of `chunk`
+1. call [`resettoexchange!`](@ref) on `set` if `reset == true`
+1. mark them as to exchange
+Else, use `set.toexchange` without modification.
+"""
+function haloupdate!(chunk::Chunk, set::Settings, depth::Int, toex = nothing, reset = true)
+    toex = if toex != nothing
+        reset && resettoexchange!(set)
+        for f in toex
+            set.toexchange[f] = true
+        end
+        toex
+    else
+        filter(f -> set.toexchange[f], EXCHANGE_FIELDS)
+    end
+
+    # Call `updateface` on all faces which are marked in `toex`
+    updateface!.(chunk, set.halodepth, depth, getfield.(chunk, toex))
 end
 
 # Calls all kernels that wrap up a solve regardless of solver
 function solvefinished!(chunk::Chunk, set::Settings)
-    if set.checkresult
-        residual!(chunk, set.halodepth)
-    end
-
+    set.checkresult && residual!(chunk, set.halodepth)
     finalise!(chunk, set.halodepth)
-    set.toexchange[:energy1] = true
-    haloupdate!(chunk, set, 1)
+    haloupdate!(chunk, set, 1, [:energy], false)
 end
 
 # Sparse Matrix Vector Product

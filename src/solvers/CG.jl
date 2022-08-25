@@ -8,11 +8,7 @@ function solve!(chunk::Chunk, set::Settings, rx::Float64, ry::Float64)::Float64
     # Perform CG initialisation
     rro = init!(chunk, set.halodepth, set.coefficient, rx, ry)
 
-    resettoexchange!(set)
-    set.toexchange[:u] = true
-    set.toexchange[:p] = true
-    haloupdate!(chunk, set, 1)
-
+    haloupdate!(chunk, set, 1, [:u, :p])
     copyu!(chunk, set.halodepth)
 
     error = ERROR_START
@@ -25,9 +21,7 @@ function solve!(chunk::Chunk, set::Settings, rx::Float64, ry::Float64)::Float64
 
         haloupdate!(chunk, set, 1)
 
-        if sqrt(abs(error)) < set.eps
-            break
-        end
+        sqrt(abs(error)) < set.eps && break
     end
 
     @info "CG solve complete" iters error

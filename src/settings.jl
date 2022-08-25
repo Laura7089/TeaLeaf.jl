@@ -1,3 +1,6 @@
+using Match
+using Parameters
+
 export Settings
 export CONDUCTIVITY, RECIP_CONDUCTIVITY
 export checkingvalue
@@ -35,7 +38,7 @@ end
 
     # Fields to exchange
     toexchange::Dict{Symbol,Bool} =
-        Dict(zip(CHUNK_EXCHANGE_FIELDS, fill(false, length(CHUNK_EXCHANGE_FIELDS))))
+        Dict(zip(EXCHANGE_FIELDS, fill(false, length(EXCHANGE_FIELDS))))
 
     errorswitch::Bool = false
     checkresult::Bool = true
@@ -64,7 +67,7 @@ end
     debugfile::String = ""
 end
 Broadcast.broadcastable(s::Settings) = Ref(s)
-resettoexchange!(s::Settings) = setindex!.(Ref(s.toexchange), false, CHUNK_EXCHANGE_FIELDS)
+resettoexchange!(s::Settings) = setindex!.(Ref(s.toexchange), false, EXCHANGE_FIELDS)
 
 function Settings(infile)
     settings = Settings()
@@ -72,10 +75,21 @@ function Settings(infile)
     @info "Reading configuration from $(infile)"
     open(infile, read = true) do tea_in
         while !eof(tea_in)
-            line = readline(tea_in)
+            line = strip(readline(tea_in))
 
             if startswith(line, "state")
                 push!(settings.states, readstate(line, settings))
+                continue
+            end
+
+            if startswith(line, "use_")
+                @match line[5:end] begin
+                    "cg" => (settings.solver = TeaLeaf.CG)
+                    "ppcg" => (settings.solver = TeaLeaf.PPCG)
+                    "cheby" => (settings.solver = TeaLeaf.Cheby)
+                    "jacobi" => (settings.solver = TeaLeaf.Jacobi)
+                    _ => (@warn "Unknown setting" line)
+                end
                 continue
             end
 
@@ -83,8 +97,6 @@ function Settings(infile)
             if startswith(line, "*") || !occursin("=", line)
                 continue
             end
-
-            # TODO: respect the `use_[solver]` lines in the config
 
             # Read all of the settings from the config
             key, val = split(line, "=")
@@ -106,7 +118,6 @@ end
 
 function readstate(line, settings::Settings)::State
     thesplit = split(line, " ")
-
     state_num = parse(Int, thesplit[2])
     state = State()
 
@@ -119,19 +130,19 @@ function readstate(line, settings::Settings)::State
         end
 
         # State 1 is the default state so geometry irrelevant
-        if state_num > 1
-            @match key begin
-                "xmin" => (state.xmin = parse(Float64, val) + settings.dx / 100)
-                "ymin" => (state.ymin = parse(Float64, val) + settings.dy / 100)
-                "xmax" => (state.xmax = parse(Float64, val) - settings.dx / 100)
-                "ymax" => (state.ymax = parse(Float64, val) - settings.dy / 100)
-                "radius" => (state.radius = parse(Float64, val))
-                "geometry" => (state.geometry = @match val begin
-                    "rectangle" => Rectangular
-                    "circular" => Circular
-                    "point" => Point
-                end)
-            end
+        state_num == 1 && continue
+
+        @match key begin
+            "xmin" => (state.xmin = parse(Float64, val) + settings.dx / 100)
+            "ymin" => (state.ymin = parse(Float64, val) + settings.dy / 100)
+            "xmax" => (state.xmax = parse(Float64, val) - settings.dx / 100)
+            "ymax" => (state.ymax = parse(Float64, val) - settings.dy / 100)
+            "radius" => (state.radius = parse(Float64, val))
+            "geometry" => (state.geometry = @match val begin
+                "rectangle" => Rectangular
+                "circular" => Circular
+                "point" => Point
+            end)
         end
     end
 

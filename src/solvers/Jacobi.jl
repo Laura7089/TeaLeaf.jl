@@ -23,9 +23,7 @@ function driver!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64)::Fl
         haloupdate!(chunk, settings, 1)
 
         final_time = tt
-        if abs(error) < settings.eps
-            break
-        end
+        abs(error) < settings.eps && break
     end
 
     @info "Jacobi" final_time

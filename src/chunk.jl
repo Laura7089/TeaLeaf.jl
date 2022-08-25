@@ -1,9 +1,9 @@
 export Chunk
 export chunksize
-export CHUNK_EXCHANGE_FIELDS
+export EXCHANGE_FIELDS
 export halo, haloa
 
-const CHUNK_EXCHANGE_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
+const EXCHANGE_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
 
 @with_kw mutable struct Chunk{T<:AbstractMatrix{Float64}}
     # Field dimensions

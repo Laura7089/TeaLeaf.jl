@@ -1,28 +1,31 @@
 module PPCG
 
 using TeaLeaf
-import ..Chunk
-import ..Settings
+using TeaLeaf.Kernels
 import ..CG
 import ..Cheby
 
 # Performs a full solve with the PPCG solver
-function solve!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64, error::Float64)
+function solve!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64)
     ppcgiters = 0
 
     # Perform CG initialisation
     rro = CG.init!(chunk, settings.halodepth, settings.coefficient, rx, ry)
 
+    error = ERROR_START
+    iters = 0
+
     # Iterate till convergence
-    for tt = 1:settings.max_iters
+    for tt = 1:settings.maxiters
+        iters = tt
         # If we have already ran PPCG inner iterations, continue
         # If we are error switching, check the error
         # If not error switching, perform preset iterations
         # Perform enough iterations to converge eigenvalues
         switchppcg =
             ppcgiters != 0 || (
-                settings.error_switch ?
-                (error < settings.eps_lim) && (tt > Cheby.CGEIGENITERS) :
+                settings.errorswitch ?
+                (error < settings.epslim) && (tt > Cheby.CGEIGENITERS) :
                 (tt > settings.presteps) && (error < ERROR_SWITCH_MAX)
             )
 
@@ -43,11 +46,9 @@ function solve!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64, erro
             rro = error = mainstep!(chunk, settings, rro)
         end
 
-        haloupdate!(chunk, settings.halodepth, 1)
+        haloupdate!(chunk, settings, 1)
 
-        if abs(error) < settings.eps
-            break
-        end
+        abs(error) < settings.eps && break
     end
 
     @info "PPCG solve complete" iters error
@@ -56,10 +57,7 @@ end
 # Invokes the PPCG initialisation kernels
 function init!(chunk::Chunk, settings::Settings)
     residual!(chunk, settings.halodepth)
-
-    resettoexhange!(settings)
-    settings.toexchange[:p] = true
-    haloupdate!(chunk, settings.hd, 1)
+    haloupdate!(chunk, settings, 1, [:p])
 end
 
 # Invokes the main PPCG solver kernels

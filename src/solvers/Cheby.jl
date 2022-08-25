@@ -54,9 +54,7 @@ function solve!(chunk::Chunk, settings::Settings, rx::Float64, ry::Float64)
 
         haloupdate!(chunk, settings, 1)
 
-        if abs(error) < settings.eps
-            break
-        end
+        abs(error) < settings.eps && break
     end
 
     @info "Cheby solve complete" chebyiters estiter
@@ -77,9 +75,7 @@ function init!(chunk::Chunk, settings::Settings, cgiters::Int)::Float64
     end
     chunk.u[xs, ys] .+= chunk.p[xs, ys]
 
-    resettoexchange!(settings)
-    settings.toexchange[:u] = true
-    haloupdate!(chunk, settings, 1)
+    haloupdate!(chunk, settings, 1, [:u])
 
     return bb
 end

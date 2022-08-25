@@ -1,9 +1,6 @@
 module TeaLeaf
 export initialiseapp!, diffuse!
 
-using Match
-using Parameters
-
 include("./settings.jl")
 include("./chunk.jl")
 include("./kernels.jl")
@@ -23,15 +20,8 @@ function initialiseapp!(settings::Settings)
     chunk = Chunk(settings)
     setchunkdata!(settings, chunk)
     setchunkstate!(chunk, settings.states)
-
     # Prime the initial halo data
-    # settings.toexchange .= false
-    resettoexchange!(settings)
-    settings.toexchange[:density] = true
-    settings.toexchange[:energy0] = true
-    settings.toexchange[:energy1] = true
-    # TODO: is depth=1 correct here?
-    haloupdate!(chunk, settings, 1)
+    haloupdate!(chunk, settings, 1, [:density, :energy0, :energy]) # TODO: is depth=1 correct
 
     chunk.energy .= chunk.energy0
 
@@ -48,13 +38,7 @@ function diffuse!(chunk::Chunk, set::Settings)
         debugrecord(set, chunk)
         rx = set.dtinit / set.dx^2
         ry = set.dtinit / set.dy^2
-
-        # Prepare halo regions for solve
-        resettoexchange!(set)
-        set.toexchange[:energy1] = true
-        set.toexchange[:density] = true
-        # TODO: is depth=1 correct here?
-        haloupdate!(chunk, set, 1)
+        haloupdate!(chunk, set, 1, [:energy, :density]) # TODO: is depth=1 correct
 
         # Perform the solve with one of the integrated solvers
         error = set.solver.solve!(chunk, set, rx, ry)
@@ -62,19 +46,14 @@ function diffuse!(chunk::Chunk, set::Settings)
         # Perform solve finalisation tasks
         solvefinished!(chunk, set)
 
-        if tt % set.summaryfrequency == 0
-            fieldsummary(chunk, set)
-        end
-
+        tt % set.summaryfrequency == 0 && fieldsummary(chunk, set)
         @info "Timestep $(tt) finished"
     end
     fieldsummary(chunk, set)
 end
 
 function debugrecord(settings::Settings, chunk::Chunk)
-    if settings.debugfile == ""
-        return
-    end
+    settings.debugfile == "" && return
 
     @info "Writing debug data to $(settings.debugfile)"
     open(settings.debugfile, write = true, append = true) do debugfile
@@ -83,8 +62,7 @@ function debugrecord(settings::Settings, chunk::Chunk)
             println(debugfile, getstring(getfield(chunk, attr)))
             println(debugfile, "")
         end
-        println(debugfile, "")
-        println(debugfile, "")
+        print(debugfile, "\n\n")
     end
 end
 
