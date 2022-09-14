@@ -1,7 +1,8 @@
+**.in*
+**.log
+*.mod
+.env
+out.txt
+src/ref
 tea.out
 tea.problems
-**.log
-**.in*
-src/ref
-*.mod
-out.txt

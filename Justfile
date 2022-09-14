@@ -1,11 +1,12 @@
 #!/usr/bin/env -S just --justfile
 set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 set positional-arguments
+set dotenv-load
 
 SRC_PATH := "./src"
 RUN_FILE := "./run.jl"
 export JULIA_MPI_BINARY := "system"
-JULIA := "julia +1.7"
+JULIA := env_var_or_default("JULIA", "julia")
 
 # Get an interactive shell with the package imported
 interactive:
@@ -22,7 +23,7 @@ debug:
 alias d := debug
 
 # Run TeaLeaf.jl's default entrypoint
-run *args="": # No compile dep since julia handles that for us
+run *args="":
     {{ JULIA }} --project "{{ RUN_FILE }}" -- {{ args }}
 alias r := run
 
