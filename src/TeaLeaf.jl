@@ -18,7 +18,6 @@ using TeaLeaf.Kernels
 
 function initialiseapp!(settings::Settings)
     chunk = Chunk(settings)
-    setchunkdata!(settings, chunk)
     setchunkstate!(chunk, settings.states)
     # Prime the initial halo data
     haloupdate!(chunk, settings, 1, [:density, :energy0, :energy]) # TODO: is depth=1 correct

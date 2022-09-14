@@ -1,3 +1,6 @@
+using Match
+using Parameters
+
 export Chunk
 export chunksize
 export EXCHANGE_FIELDS
@@ -26,15 +29,11 @@ const EXCHANGE_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
     ky::T = zeros(x, y)
     sd::T = zeros(x, y)
 
-    cellx::AbstractVector{Float64} = zeros(x)
-    celly::AbstractVector{Float64} = zeros(y)
-    celldx::AbstractVector{Float64} = zeros(x)
-    celldy::AbstractVector{Float64} = zeros(y)
+    vertexx::AbstractVector{Float64}
+    vertexy::AbstractVector{Float64}
 
-    vertexdx::AbstractVector{Float64} = zeros(x + 1)
-    vertexdy::AbstractVector{Float64} = zeros(y + 1)
-    vertexx::AbstractVector{Float64} = zeros(x + 1)
-    vertexy::AbstractVector{Float64} = zeros(y + 1)
+    cellx::AbstractVector{Float64} = @. 0.5(vertexx[begin:end-1] + vertexx[begin+1:end])
+    celly::AbstractVector{Float64} = @. 0.5(vertexy[begin:end-1] + vertexx[begin+1:end])
 
     volume::T = zeros(x, y)
     xarea::T = zeros(x + 1, y)
@@ -46,28 +45,34 @@ const EXCHANGE_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
     eigmin::Float64 = 0.0
     eigmax::Float64 = 0.0
 
-    cgα::Vector{Float64}
-    cgβ::Vector{Float64}
-    chebyα::Vector{Float64}
-    chebyβ::Vector{Float64}
+    cgα::AbstractVector{Float64}
+    cgβ::AbstractVector{Float64}
+    chebyα::AbstractVector{Float64}
+    chebyβ::AbstractVector{Float64}
 end
 Broadcast.broadcastable(c::Chunk) = Ref(c)
 
 # Initialise the chunk
-function Chunk(settings::Settings)
-    chunkx = settings.xcells + 2settings.halodepth
-    chunky = settings.ycells + 2settings.halodepth
+function Chunk(set::Settings)
+    x = set.xcells + 2set.halodepth
+    y = set.ycells + 2set.halodepth
 
     return Chunk(
-        # Initialise the key variables
-        x = chunkx,
-        y = chunky,
+        x = x,
+        y = y,
+
+        vertexx = (@. set.xmin + set.dx * ((1:x+1) - set.halodepth - 1)),
+        vertexy = (@. set.ymin + set.dy * ((1:y+1) - set.halodepth - 1)),
+
+        volume = fill(set.dx * set.dy, (x, y)),
+        xarea = fill(set.dy, (x, y)),
+        yarea = fill(set.dx, (x, y)),
 
         # Solver-specific
-        cgα = zeros(settings.maxiters),
-        cgβ = zeros(settings.maxiters),
-        chebyα = zeros(settings.maxiters),
-        chebyβ = zeros(settings.maxiters),
+        cgα = zeros(set.maxiters),
+        cgβ = zeros(set.maxiters),
+        chebyα = zeros(set.maxiters),
+        chebyβ = zeros(set.maxiters),
     )
 end
 
@@ -76,59 +81,33 @@ Base.axes(c::Chunk) = axes(c.density0)
 haloa(c::Chunk, hd::Int) = Tuple(ax[begin+hd:end-hd] for ax in axes(c))
 halo(c::Chunk, hd::Int) = CartesianIndices(haloa(c, hd))
 
-function setchunkdata!(settings::Settings, chunk::Chunk)
-    xₛ, yₛ = size(chunk)
-
-    xᵢ = 1:xₛ+1
-    @. chunk.vertexx[xᵢ] = settings.xmin + settings.dx * (xᵢ - settings.halodepth - 1)
-    yᵢ = 1:yₛ+1
-    @. chunk.vertexy[yᵢ] = settings.ymin + settings.dy * (yᵢ - settings.halodepth - 1)
-
-    xᵢ, yᵢ = axes(chunk)
-    @. chunk.cellx = 0.5(chunk.vertexx[xᵢ] + chunk.vertexx[xᵢ+1])
-    @. chunk.celly = 0.5(chunk.vertexy[yᵢ] + chunk.vertexy[yᵢ+1])
-
-    chunk.volume .= settings.dx * settings.dy
-    chunk.xarea .= settings.dy
-    chunk.yarea .= settings.dx
-end
-
-function setchunkstate!(chunk::Chunk, states::Vector{State})
+function setchunkstate!(ch::Chunk, states::Vector{State})
     # Set the initial state
-    chunk.energy0 .= states[1].energy
-    chunk.density .= states[1].density
+    ch.energy0 .= states[1].energy
+    ch.density .= states[1].density
 
-    x, y = size(chunk)
+    x, y = size(ch)
 
     # Apply all of the states in turn
-    for ss in eachindex(states), jj = 1:y, kk = 1:x
-        apply_state = @match states[ss].geometry begin
+    for s in states, j = 1:y, k = 1:x
+        apply = @match s.geometry begin
             Rectangular => all((
-                chunk.vertexx[kk+1] >= states[ss].xmin,
-                chunk.vertexx[kk] < states[ss].xmax,
-                chunk.vertexy[jj+1] >= states[ss].ymin,
-                chunk.vertexy[jj] < states[ss].ymax,
+                ch.vertexx[k+1] >= s.xmin,
+                ch.vertexx[k] < s.xmax,
+                ch.vertexy[j+1] >= s.ymin,
+                ch.vertexy[j] < s.ymax,
             ))
-            Circular => begin
-                radius = sqrt(
-                    (chunk.cellx[kk] - states[ss].xmin)^2 +
-                    (chunk.celly[jj] - states[ss].ymin)^2,
-                )
-                radius <= states[ss].radius
-            end
-            Point =>
-                chunk.vertexx[kk] == states[ss].xmin &&
-                    chunk.vertexy[jj] == states[ss].ymin
+            Circular =>
+                (ch.cellx[k] - s.xmin)^2 + (ch.celly[j] - s.ymin)^2 <= s.radius^2
+            Point => ch.vertexx[k] == s.xmin && ch.vertexy[j] == s.ymin
         end
+        apply || continue
 
-        # Check if state applies at this vertex, and apply
-        if apply_state
-            chunk.energy0[jj, kk] = states[ss].energy
-            chunk.density[jj, kk] = states[ss].density
-        end
+        ch.energy0[j, k] = s.energy
+        ch.density[j, k] = s.density
     end
 
     # Set an initial state for u
-    I = halo(chunk, 1) # note hardcoded 1
-    @. chunk.u[I] = chunk.energy0[I] * chunk.density[I]
+    I = halo(ch, 1) # note hardcoded 1
+    @. ch.u[I] = ch.energy0[I] * ch.density[I]
 end
