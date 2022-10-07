@@ -19,6 +19,13 @@ To see more options, see the output of `just -l`.
 
 #### Manually
 
+There are a handful of options for running the program manually:
+
+- It can be run straight from this directory using the quick-run script with `julia --project ./run.jl`.
+  Extra CLI args can be appended with `-- --extra-arg`.
+  See `julia --project ./run.jl -- --help` for options.
+- It can be run from the Julia REPL started with `julia --project` (see the documentation for this).
+
 ### Documentation
 
 ## Licensing
