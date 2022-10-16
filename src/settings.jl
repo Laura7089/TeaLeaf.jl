@@ -14,6 +14,9 @@ const CONDUCTIVITY = 1
 const RECIP_CONDUCTIVITY = 2
 
 # TODO: can we make this immutable?
+"""
+Describes a state obtained from a settings file.
+"""
 @with_kw mutable struct State
     density::Float64 = 0.0
     energy::Float64 = 0.0
@@ -25,7 +28,14 @@ const RECIP_CONDUCTIVITY = 2
     geometry::Geometry = Rectangular
 end
 
-# The main settings structure
+"""
+The main settings object.
+
+- Represents values loaded from the settings file (or defaults)
+- Tracks state between iterations
+
+Use `Settings("infile.in")` to initialise from a file.
+"""
 @with_kw mutable struct Settings
     # Solve-wide constants
     endstep::Int = typemax(Int)
@@ -69,6 +79,14 @@ end
 Broadcast.broadcastable(s::Settings) = Ref(s)
 resettoexchange!(s::Settings) = setindex!.(Ref(s.toexchange), false, EXCHANGE_FIELDS)
 
+"""
+    Settings(infile)
+
+Load a [`Settings`](@ref) object from a settings file (typically 'tea.in').
+
+Logs status to the console, most notably unrecognised settings
+keys - some of which may not be implemented in this TeaLeaf port yet.
+"""
 function Settings(infile)
     settings = Settings()
     # Open the configuration file
@@ -116,6 +134,11 @@ function Settings(infile)
     return settings
 end
 
+"""
+    readstate(line, settings)
+
+Read and return the [`State`](@ref) from a line beginning `state` in a settings file.
+"""
 function readstate(line, settings::Settings)::State
     thesplit = split(line, " ")
     state_num = parse(Int, thesplit[2])
@@ -149,7 +172,11 @@ function readstate(line, settings::Settings)::State
     return state
 end
 
-# Fetches the checking value from the test problems file
+"""
+    checkingvalue(settings, file = "tea.problems")
+
+Fetches the checking value from the test problems file (`problemfile`).
+"""
 function checkingvalue(settings::Settings, problemfile = "tea.problems")::Float64
     open(problemfile, read = true) do file
         while !eof(file)

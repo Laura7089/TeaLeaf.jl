@@ -16,7 +16,23 @@ using TeaLeaf.Kernels
 # TODO: doc comments -> docstrings
 # TODO: fix naming convention
 
-function initialiseapp!(settings::Settings)
+"""
+    initialiseapp!(settings)
+
+Loads the first state into a new [`Chunk`](@ref) and returns it.
+
+# Examples
+
+Once your settings are loaded (see [`Settings`](@ref)), this should be the first thing to be called for a typical run.
+
+```julia-repl
+julia> using TeaLeaf
+julia> set = Settings("tea.in")
+julia> chunk = initialiseapp!(set) # Here
+julia> diffuse!(chunk, set)
+```
+"""
+function initialiseapp!(settings::Settings)::Chunk
     chunk = Chunk(settings)
     setchunkstate!(chunk, settings.states)
     # Prime the initial halo data
@@ -27,7 +43,22 @@ function initialiseapp!(settings::Settings)
     return chunk
 end
 
-# The main timestep loop
+"""
+    diffuse!(chunk, settings)
+
+The main timestep loop.
+
+# Examples
+
+In normal operation, this should be the second thing called after [`initialiseapp!`](@ref):
+
+```julia-repl
+julia> using TeaLeaf
+julia> set = Settings("tea.in")
+julia> chunk = initialiseapp!(set)
+julia> diffuse!(chunk, set) # Here
+```
+"""
 function diffuse!(chunk::Chunk, set::Settings)
     if set.debugfile != "" && isfile(set.debugfile)
         rm(set.debugfile)
@@ -51,6 +82,11 @@ function diffuse!(chunk::Chunk, set::Settings)
     fieldsummary(chunk, set)
 end
 
+"""
+    debugrecord(settings, chunk)
+
+Dump the raw contents of a [`Chunk`](@ref) to `settings.debugfile`.
+"""
 function debugrecord(settings::Settings, chunk::Chunk)
     settings.debugfile == "" && return
 

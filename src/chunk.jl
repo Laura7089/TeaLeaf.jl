@@ -6,8 +6,16 @@ export chunksize
 export EXCHANGE_FIELDS
 export halo, haloa
 
+"""
+All fields which can be exchanged by the program.
+"""
 const EXCHANGE_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
 
+"""
+Describes the current 2D state of the model.
+
+See also [`initialiseapp!`](@ref), [`setchunkstate!`](@ref).
+"""
 @with_kw mutable struct Chunk{T<:AbstractMatrix{Float64}}
     # Field dimensions
     x::Int
@@ -52,7 +60,11 @@ const EXCHANGE_FIELDS = [:density, :p, :energy0, :energy, :u, :sd]
 end
 Broadcast.broadcastable(c::Chunk) = Ref(c)
 
-# Initialise the chunk
+"""
+    Chunk(settings)
+
+Initialise an empty chunk from `settings`.
+"""
 function Chunk(set::Settings)
     x = set.xcells + 2set.halodepth
     y = set.ycells + 2set.halodepth
@@ -78,9 +90,35 @@ end
 
 Base.size(c::Chunk) = size(c.density0)
 Base.axes(c::Chunk) = axes(c.density0)
+
+"""
+    haloa(chunk, depth)
+
+Get a [`Tuple`](@ref) of axes within `chunk` that represent the halo of depth `depth`.
+"""
 haloa(c::Chunk, hd::Int) = Tuple(ax[begin+hd:end-hd] for ax in axes(c))
+"""
+    halo(chunk, depth)
+
+Convenience wrapper for [`CartesianIndices`](@ref) over [`haloa`](@ref).
+
+# Examples
+
+Use to get a 2D index that will work seamlessly in julia:
+
+```julia-repl
+julia> set = Settings("tea.in")
+julia> chunk = initialiseapp!(set)
+julia> chunk[halo(chunk, 2)]
+```
+"""
 halo(c::Chunk, hd::Int) = CartesianIndices(haloa(c, hd))
 
+"""
+    setchunkstate!(chunk, states)
+
+Apply each member of `states` in turn to `chunk`.
+"""
 function setchunkstate!(ch::Chunk, states::Vector{State})
     # Set the initial state
     ch.energy0 .= states[1].energy

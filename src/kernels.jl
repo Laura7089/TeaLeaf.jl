@@ -7,7 +7,15 @@ using ExportAll
 const ERROR_START = 1e+10
 const ERROR_SWITCH_MAX = 1.0
 
-# Calculates the eigenvalues from cg_alphas and cg_betas
+"""
+    eigenvalues!(chunk, settings, cgiters)
+
+Calculate the eigenvalues from `chunk.cgα` and `chunk.cβ`.
+
+# Note
+
+Currently not proven to be a correct reimplementation.
+"""
 function eigenvalues!(chunk::Chunk, settings::Settings, cgiters::Int)
     diag = 1 ./ chunk.cgα[1:cgiters]
     offdiag = zeros(cgiters)
@@ -43,8 +51,12 @@ function eigenvalues!(chunk::Chunk, settings::Settings, cgiters::Int)
 end
 
 # TODO: can we replace with inbuilt julia stuff?
-# Adapted from
-# http://ftp.cs.stanford.edu/cs/robotics/scohen/nr/tqli.c
+"""
+    tqli!(d, e, n)
+
+Apply the TQLI algorithm to find eigenvalues of `d` and `e`.
+Adapted from [this method](http://ftp.cs.stanford.edu/cs/robotics/scohen/nr/tqli.c).
+"""
 function tqli!(d::Vector{Float64}, e::Vector{Float64}, n::Int)
     s = r = p = g = f = dd = c = b = 0.0
 
@@ -99,6 +111,11 @@ function tqli!(d::Vector{Float64}, e::Vector{Float64}, n::Int)
     end
 end
 
+"""
+    fieldsummary(chunk, settings)
+
+Check the error margins of `chunk` according to `settings` and log the result.
+"""
 function fieldsummary(chunk::Chunk, set::Settings)
     !set.checkresult && return
 
@@ -141,15 +158,23 @@ function haloupdate!(chunk::Chunk, set::Settings, depth::Int, toex = nothing, re
     updateface!.(chunk, set.halodepth, depth, getfield.(chunk, toex))
 end
 
-# Calls all kernels that wrap up a solve regardless of solver
+"""
+    solvefinished!(chunk, settings)
+
+Call all kernels on `chunk` that wrap up a solve, regardless of solver.
+"""
 function solvefinished!(chunk::Chunk, set::Settings)
     set.checkresult && residual!(chunk, set.halodepth)
     finalise!(chunk, set.halodepth)
     haloupdate!(chunk, set, 1, [:energy], false)
 end
 
-# Sparse Matrix Vector Product
 # TODO: what the hell is this trying to do???
+"""
+    smvp(chunk, chunkfield, index)
+
+Sparse Matrix Vector Product.
+"""
 function smvp(chunk::Chunk, a::AbstractMatrix{Float64}, index::CartesianIndex)::Float64
     x, y = Tuple(index)
     consum = sum((1, chunk.kx[x+1, y], chunk.kx[x, y], chunk.ky[x, y+1], chunk.ky[x, y]))
@@ -158,7 +183,11 @@ function smvp(chunk::Chunk, a::AbstractMatrix{Float64}, index::CartesianIndex)::
     -(chunk.ky[x, y+1] * a[x, y+1] + chunk.ky[x, y] * a[x, y-1])
 end
 
-# Updates faces in turn.
+"""
+    updateface!(chunk, halodepth, depth, buffer)
+
+Update faces of `buffer` in turn.
+"""
 function updateface!(chunk::Chunk, hd::Int, depth::Int, buffer::AbstractMatrix{Float64})
     x, y = size(chunk)
     xs, ys = haloa(chunk, hd)
@@ -180,13 +209,21 @@ function updateface!(chunk::Chunk, hd::Int, depth::Int, buffer::AbstractMatrix{F
     end
 end
 
-# Copies the current u into u0
+"""
+    copyu!(chunk, halodepth)
+
+Copy the current u into u0 within the halo produced by `halodepth`.
+"""
 function copyu!(chunk::Chunk, hd::Int)
     H = halo(chunk, hd)
     chunk.u0[H] .= chunk.u[H]
 end
 
-# Calculates the current value of r
+"""
+    residual!(chunk, halodepth)
+
+Update the value of `chunk.r` within `halodepth`.
+"""
 function residual!(chunk::Chunk, hd::Int)
     xs, ys = haloa(chunk, hd)
     for jj in ys, kk in xs
@@ -194,7 +231,11 @@ function residual!(chunk::Chunk, hd::Int)
     end
 end
 
-# Finalises the solution
+"""
+    finalise!(chunk, halodepth)
+
+Finalise the solution.
+"""
 function finalise!(chunk::Chunk, hd::Int)
     H = halo(chunk, hd)
     @. chunk.energy[H] = chunk.u[H] / chunk.density[H]
